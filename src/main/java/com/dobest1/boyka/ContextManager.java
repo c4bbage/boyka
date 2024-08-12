@@ -6,9 +6,11 @@ import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 
 public class ContextManager {
     private final Project project;
