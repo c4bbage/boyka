@@ -1,0 +1,36 @@
+<idea-plugin>
+    <id>com.dobest1.boyka</id>
+    <name>Boyka AI Assistant</name>
+    <vendor email="support@dobest1.com" url="https://www.dobest1.com">dobest1</vendor>
+
+    <description><![CDATA[
+    Boyka AI Assistant is an intelligent coding companion that integrates AI-powered assistance into your development workflow.
+    Features:
+    - AI-powered code suggestions and explanations
+    - File management tools
+    - Context-aware assistance
+    - Support for multiple AI models (OpenAI and Claude)
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="Boyka AI" secondary="true" icon="AllIcons.General.Modified" anchor="right"
+                    factoryClass="com.dobest1.boyka.BoykaAIToolWindowFactory"/>
+        <applicationService serviceImplementation="com.dobest1.boyka.BoykaAISettings"/>
+        <applicationConfigurable instance="com.dobest1.boyka.BoykaAIConfigurable"
+                                 id="com.dobest1.boyka.BoykaAIConfigurable"
+                                 displayName="Boyka AI Settings"/>
+        <statusBarWidgetFactory implementation="com.dobest1.boyka.BoykaAIStatusBarWidgetFactory"
+                                id="com.dobest1.boyka.BoykaAIStatusBarWidget"
+                                order="first"/>
+        <projectService serviceImplementation="com.dobest1.boyka.BoykaAIFileTools"/>
+        <projectService serviceImplementation="com.dobest1.boyka.ContextManager"/>
+    </extensions>
+
+    <actions>
+        <!-- Add your actions here -->
+    </actions>
+</idea-plugin>
