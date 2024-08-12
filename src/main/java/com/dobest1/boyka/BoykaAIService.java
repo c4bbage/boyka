@@ -1,36 +1,69 @@
 package com.dobest1.boyka;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import okhttp3.*;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 
 public class BoykaAIService {
+    private static final int TIMEOUT_MINUTES = 2;
+
     private final OkHttpClient client;
     private final Gson gson;
     private final BoykaAIFileTools fileTools;
+    private BoykaAISettings.State settings;
 
     public BoykaAIService(BoykaAIFileTools fileTools) {
         this.fileTools = fileTools;
         try {
             Class.forName("okhttp3.OkHttpClient");
-            this.client = new OkHttpClient();
+            this.client = new OkHttpClient.Builder()
+                    .connectTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
+                    .readTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
+                    .writeTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
+                    .build();
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Failed to load OkHttpClient", e);
         }
         this.gson = new Gson();
+        this.settings = BoykaAISettings.getInstance().getState();
     }
 
-    public String getAIResponse(String message, String model, List<Tool> availableTools, String context) {
-        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
-        String url = model.equals("OpenAI") ? settings.openAIAddress : settings.claudeAddress;
-        String apiKey = model.equals("OpenAI") ? settings.openAIKey : settings.claudeKey;
+    public void updateSettings(BoykaAISettings.State newSettings) {
+        this.settings = newSettings;
+    }
+    public boolean validateSettings() {
+        if (settings.openAIBaseAddress.isEmpty() || settings.openAIKey.isEmpty()) {
+            return false;
+        }
+
+        String testUrl = settings.openAIBaseAddress + "v1/models";
+        Request request = new Request.Builder()
+                .url(testUrl)
+                .addHeader("Authorization", "Bearer " + settings.openAIKey)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            return response.isSuccessful();
+        } catch (IOException e) {
+            BoykaAILogger.error("Error validating settings", e);
+            return false;
+        }
+    }
+    public String getAIResponse(String message, String provider, List<Tool> availableTools, String context, String model) {
+        String url = provider.equals("OpenAI")
+                ? settings.openAIBaseAddress + "v1/chat/completions"
+                : settings.claudeAddress;
+        String apiKey = provider.equals("OpenAI") ? settings.openAIKey : settings.claudeKey;
 
         String prompt = createPrompt(message, context, availableTools);
-        AIRequest aiRequest = new AIRequest(prompt, availableTools);
+        AIRequest aiRequest = new AIRequest(prompt, availableTools, model);
         RequestBody body = RequestBody.create(
                 gson.toJson(aiRequest),
                 MediaType.parse("application/json")
@@ -43,10 +76,20 @@ public class BoykaAIService {
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+            if (!response.isSuccessful()) {
+                String errorBody = response.body() != null ? response.body().string() : "No error body";
+                BoykaAILogger.error("API request failed", new IOException("Unexpected code " + response.code() + ". Error body: " + errorBody));
+                return "Error: API request failed with code " + response.code() + ". Please check your settings and try again.";
+            }
 
-            AIResponse aiResponse = gson.fromJson(response.body().string(), AIResponse.class);
-            
+            String responseBody = response.body() != null ? response.body().string() : "";
+            if (responseBody.isEmpty()) {
+                BoykaAILogger.error("Empty response body", new IOException("Empty response body"));
+                return "Error: Received empty response from the API. Please try again.";
+            }
+
+            AIResponse aiResponse = gson.fromJson(responseBody, AIResponse.class);
+
             StringBuilder finalResponse = new StringBuilder();
             for (Choice choice : aiResponse.choices) {
                 finalResponse.append(choice.message.content).append("\n");
@@ -54,14 +97,18 @@ public class BoykaAIService {
                     for (ToolCall toolCall : choice.toolCalls) {
                         String toolResult = executeToolCall(toolCall);
                         finalResponse.append("工具调用: ").append(toolCall.function.getName())
-                                        .append("\n结果: ").append(toolResult).append("\n");
+                                .append("\n结果: ").append(toolResult).append("\n");
                     }
                 }
             }
 
             return finalResponse.toString();
         } catch (IOException e) {
-            return "Error: " + e.getMessage();
+            BoykaAILogger.error("Error during API call", e);
+            return "Error: " + e.getMessage() + ". Please check your network connection and try again.";
+        } catch (JsonSyntaxException e) {
+            BoykaAILogger.error("Error parsing JSON response", e);
+            return "Error: Failed to parse the API response. Please try again or contact support.";
         }
     }
 
@@ -80,6 +127,7 @@ public class BoykaAIService {
     }
 
     private String executeToolCall(ToolCall toolCall) {
+        try {
         JsonObject args = gson.fromJson(toolCall.arguments, JsonObject.class);
         switch (toolCall.function.getName()) {
             case "create_file":
@@ -108,6 +156,10 @@ public class BoykaAIService {
             default:
                 return "未知的工具调用: " + toolCall.function.getName();
         }
+        } catch (Exception e) {
+            BoykaAILogger.error("Error executing tool call", e);
+            return "Error: " + e.getMessage();
+        }
     }
 
     private List<Tool> createAvailableTools() {
@@ -133,7 +185,7 @@ public class BoykaAIService {
         editAndApplySchema.add("properties", editAndApplyProperties);
         editAndApplySchema.add("required", gson.toJsonTree(new String[]{"path", "instructions", "project_context"}));
         tools.add(new Tool("edit_and_apply", 
-            "根据特定指令和详细的项目上下文对文件应用AI驱动的改进。此函数读取文件，使用带有对话历史和全面代码相关项目上下文的AI分批处理它。它生成差异并允许用户在应用更改之前确认。目标是保持一致性并防止破坏文件之间的连接。此工具应用于需要理解更广泛项目上下文的复杂代码修改。",
+            "根据特定指令和详细的项目上下文对文件应用AI驱动的改进。此函数读取文件，使用带有对话历史和全面代码��关项目上下文的AI分批处理它。它生成差异并允许用户在应用更改之前确认。目标是保持一致性并防止破坏文件之间的连接。此工具应用于需要理解更广泛项目上下文的复杂代码修改。",
             editAndApplySchema));
 
         // Execute Code Tool
@@ -189,11 +241,12 @@ public class BoykaAIService {
     }
 
     private static class AIRequest {
-        String model = "gpt-3.5-turbo";
+        String model;
         Message[] messages;
         List<Tool> tools;
 
-        AIRequest(String prompt, List<Tool> availableTools) {
+        AIRequest(String prompt, List<Tool> availableTools, String model) {
+            this.model = model;
             this.messages = new Message[]{
                 new Message("system", prompt)
             };

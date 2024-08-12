@@ -46,14 +46,14 @@ public class BoykaAIConfigurable implements Configurable {
                 .addLabeledComponent(new JBLabel("OpenAI API 密钥: "), openAIKeyField)
                 .addLabeledComponent(new JBLabel("Claude 地址: "), claudeAddressField)
                 .addLabeledComponent(new JBLabel("Claude API 密钥: "), claudeKeyField)
-                .addLabeledComponent(new JBLabel("模型: "), modelSelector)
+                .addLabeledComponent(new JBLabel("厂商: "), modelSelector)
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
     }
 
     private void loadSettings() {
         BoykaAISettings.State state = BoykaAISettings.getInstance().getState();
-        openAIAddressField.setText(state.openAIAddress);
+        openAIAddressField.setText(state.openAIBaseAddress);
         openAIKeyField.setText(state.openAIKey);
         claudeAddressField.setText(state.claudeAddress);
         claudeKeyField.setText(state.claudeKey);
@@ -63,7 +63,7 @@ public class BoykaAIConfigurable implements Configurable {
     @Override
     public boolean isModified() {
         BoykaAISettings.State state = BoykaAISettings.getInstance().getState();
-        return !openAIAddressField.getText().equals(state.openAIAddress) ||
+        return !openAIAddressField.getText().equals(state.openAIBaseAddress) ||
                 !openAIKeyField.getText().equals(state.openAIKey) ||
                 !claudeAddressField.getText().equals(state.claudeAddress) ||
                 !claudeKeyField.getText().equals(state.claudeKey) ||
@@ -73,7 +73,7 @@ public class BoykaAIConfigurable implements Configurable {
     @Override
     public void apply() throws ConfigurationException {
         BoykaAISettings.State state = BoykaAISettings.getInstance().getState();
-        state.openAIAddress = openAIAddressField.getText();
+        state.openAIBaseAddress = openAIAddressField.getText();
         state.openAIKey = openAIKeyField.getText();
         state.claudeAddress = claudeAddressField.getText();
         state.claudeKey = claudeKeyField.getText();

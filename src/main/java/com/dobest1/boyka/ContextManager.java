@@ -13,10 +13,12 @@ import java.nio.file.Paths;
 public class ContextManager {
     private final Project project;
     private final List<String> contextFiles;
+    private final Map<String, String> fileContents;
 
     public ContextManager(Project project) {
         this.project = project;
         this.contextFiles = new ArrayList<>();
+        this.fileContents = new HashMap<>();
     }
 
     public void addFileToContext(String filePath) {
@@ -61,4 +63,21 @@ public class ContextManager {
         }
         return null;
     }
+    public void updateFileContent(String filePath, String content) {
+        fileContents.put(filePath, content);
+    }
+
+    public String getFileContent(String filePath) {
+        return fileContents.get(filePath);
+    }
+
+    public String getFullContext() {
+        StringBuilder context = new StringBuilder();
+        for (String filePath : contextFiles) {
+            context.append("File: ").append(filePath).append("\n");
+            context.append(fileContents.get(filePath)).append("\n\n");
+        }
+        return context.toString();
+    }
+}
 }

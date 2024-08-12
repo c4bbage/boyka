@@ -7,17 +7,21 @@ import com.intellij.openapi.components.Storage;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @State(
         name = "BoykaAISettings",
         storages = {@Storage("BoykaAISettings.xml")}
 )
 public class BoykaAISettings implements PersistentStateComponent<BoykaAISettings.State> {
     public static class State {
-        public String openAIAddress = "https://api.openai.com/v1/chat/completions";
-        public String openAIKey = "";
-        public String claudeAddress = "https://api.anthropic.com/v1/messages";
+        public String openAIBaseAddress = "http://192.168.135.64:3000/";
+        public String openAIKey = "sk-c7Ykbdq8AVQej8evD375058d1bA74993B9807fDb9cB7Db60";
+        public String claudeAddress = "";
         public String claudeKey = "";
-        public String selectedModel = "OpenAI";
+        public String selectedModel = "gpt-3.5-turbo";
+        public List<String> availableModels = new ArrayList<>();
         public boolean enableTools = true;
     }
 
