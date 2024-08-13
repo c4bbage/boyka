@@ -12,6 +12,8 @@ import java.util.concurrent.TimeUnit;
 
 public class BoykaAIService {
     private static final int TIMEOUT_MINUTES = 10;
+    private List<Message> conversationHistory = new ArrayList<>();
+
     private static final String BASE_SYSTEM_PROMPT = """
     You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
@@ -123,97 +125,126 @@ public class BoykaAIService {
             return false;
         }
     }
+    private RequestBody createOpenAIRequestBody(String context, List<Tool> availableTools, String model) {
+        JsonObject jsonBody = new JsonObject();
+        jsonBody.addProperty("model", model);
 
-    public String getAIResponse(String message, String provider, List<Tool> availableTools, String context, String model) {
-        String url = provider.equals("OpenAI")
-                ? settings.openAIBaseAddress + "v1/chat/completions"
-                : settings.claudeAddress;
-        String apiKey = provider.equals("OpenAI") ? settings.openAIKey : settings.claudeKey;
+        JsonArray messages = new JsonArray();
+        JsonObject systemMessage = new JsonObject();
+        systemMessage.addProperty("role", "system");
+        systemMessage.addProperty("content", BASE_SYSTEM_PROMPT + "\n\nContext: " + context);
+        messages.add(systemMessage);
 
-        String prompt = createPrompt(message, context, availableTools);
-        AIRequest aiRequest = new AIRequest(prompt, availableTools, model);
-        RequestBody body = RequestBody.create(
-                gson.toJson(aiRequest),
-                MediaType.parse("application/json")
-        );
+        // 添加对话历史
+        for (Message message : conversationHistory) {
+            JsonObject messageObject = new JsonObject();
+            messageObject.addProperty("role", message.role);
+            messageObject.addProperty("content", message.content);
+            messages.add(messageObject);
+        }
 
-        Request request = new Request.Builder()
-                .url(url)
+        jsonBody.add("messages", messages);
+
+        JsonArray toolsArray = new JsonArray();
+        for (Tool tool : availableTools) {
+            toolsArray.add(tool.toOpenAIFormat());
+        }
+        jsonBody.add("tools", toolsArray);
+
+
+        return RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
+    }
+
+    private RequestBody createClaudeRequestBody(String context, List<Tool> availableTools, String model) {
+        JsonObject jsonBody = new JsonObject();
+        jsonBody.addProperty("model", settings.claudeModel);
+        jsonBody.addProperty("max_tokens", settings.maxTokens);
+        jsonBody.addProperty("system",BASE_SYSTEM_PROMPT+ "\n\nContext: " + context);
+        JsonArray messages = new JsonArray();
+
+        // 添加对话历史
+        for (Message message : conversationHistory) {
+            JsonObject messageObject = new JsonObject();
+            messageObject.addProperty("role", message.role);
+            messageObject.addProperty("content", message.content);
+            messages.add(messageObject);
+        }
+
+        jsonBody.add("messages", messages);
+
+        JsonArray toolsArray = new JsonArray();
+        for (Tool tool : availableTools) {
+            toolsArray.add(tool.toClaudeFormat());
+        }
+        jsonBody.add("tools", toolsArray);
+        BoykaAILogger.info("API Request Body: " + jsonBody.toString());
+        return RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
+    }
+    public String getAIResponse(String userMessage, List<Tool> availableTools, String context, String model) {
+        // 添加用户消息到对话历史
+        conversationHistory.add(new Message("user", userMessage));
+
+        String url;
+        String apiKey;
+        RequestBody body;
+        Request.Builder requestBuilder = new Request.Builder();
+
+        if (settings.enableOpenai) {
+            url = settings.openAIBaseAddress + "v1/chat/completions";
+            apiKey = settings.openAIKey;
+            body = createOpenAIRequestBody(context, availableTools, model);
+            requestBuilder.addHeader("Authorization", "Bearer " + apiKey);
+        } else {
+            url = settings.claudeAddress + "v1/messages";
+            apiKey = settings.claudeKey;
+            body = createClaudeRequestBody(context, availableTools, model);
+            requestBuilder.addHeader("x-api-key", apiKey);
+            requestBuilder.addHeader("anthropic-version", "2023-06-01");
+        }
+
+        requestBuilder.url(url)
                 .post(body)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .build();
+                .addHeader("content-type", "application/json");
+        BoykaAILogger.info("API Request: " + url);
+        BoykaAILogger.info("API Request Body: " + body.toString());
 
-        StringBuilder conversationHistory = new StringBuilder();
-        conversationHistory.append("User: ").append(message).append("\n\n");
+        Request request = requestBuilder.build();
+
         StringBuilder finalResponse = new StringBuilder();
-        Boolean isToolCall = false;
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 String errorBody = response.body() != null ? response.body().string() : "No error body";
                 BoykaAILogger.error("API request failed", new IOException("Unexpected code " + response.code() + ". Error body: " + errorBody));
                 return "Error: API request failed with code " + response.code() + ". Please check your settings and try again.";
             }
-
             String responseBody = response.body() != null ? response.body().string() : "";
+            BoykaAILogger.info("API Response: " + responseBody);
+
             if (responseBody.isEmpty()) {
                 BoykaAILogger.error("Empty response body", new IOException("Empty response body"));
                 return "Error: Received empty response from the API. Please try again.";
             }
-            AIResponse aiResponse = gson.fromJson(responseBody, AIResponse.class);
-            BoykaAILogger.info("AI Response: " + responseBody);
-            for (Choice choice : aiResponse.choices) {
-                finalResponse.append(choice.message.content).append("\n");
-                if (choice.toolCalls != null) {
-                    isToolCall = true;
-                    for (ToolCall toolCall : choice.toolCalls) {
-                        String toolResult = executeToolCall(toolCall);
-                        finalResponse.append("工具调用: ").append(toolCall.function.name)
-                                .append("\n结果: ").append(toolResult).append("\n");
-                        // 添加工具调用和结果到对话历史
-                        BoykaAILogger.info("Assistant: Using tool " + toolCall.function.name+" with arguments " + toolCall.arguments+" and result "+toolResult);
-                        conversationHistory.append("Assistant: Using tool ").append(toolCall.function.name).append("\n");
-                        conversationHistory.append("Tool Result: ").append(toolResult).append("\n\n");
-                        // Update context based on tool call results
-                        if (toolCall.function.name.equals("read_file") || toolCall.function.name.equals("create_file")) {
-                            JsonObject args = gson.fromJson(toolCall.arguments, JsonObject.class);
-                            String filePath = args.get("path").getAsString();
-                            contextManager.updateFileContent(filePath, toolResult);
-                        }
-                    }
-                }
+
+            if (settings.enableOpenai) {
+                AIResponse aiResponse = gson.fromJson(responseBody, AIResponse.class);
+                processOpenAIResponse(aiResponse, finalResponse, availableTools, url, apiKey, model);
+            } else {
+                AIClaudeResponse claudeResponse = gson.fromJson(responseBody, AIClaudeResponse.class);
+                processClaudeResponse(claudeResponse, finalResponse, availableTools, url, apiKey, model);
             }
 
             // 进行额外的 AI 调用来分析工具调用结果
-            String analysisPrompt = "Analyze the following conversation and tool results, then provide a comprehensive response:\n\n" + conversationHistory.toString();
-            // Potential additional AI call to analyze tool call results
-            String analysisResponse = "";
-            try {
-                AIRequest analysisRequest = new AIRequest(analysisPrompt, availableTools, model);
-                RequestBody analysisBody = RequestBody.create(
-                        gson.toJson(analysisRequest),
-                        MediaType.parse("application/json")
-                );
+            String analysisPrompt = "Analyze the following conversation and tool results, then provide a comprehensive response:\n\n" + getConversationHistoryString();
 
-                Request analysisApiRequest = new Request.Builder()
-                        .url(url)
-                        .post(analysisBody)
-                        .addHeader("Authorization", "Bearer " + apiKey)
-                        .build();
-
-                Response analysisApiResponse = client.newCall(analysisApiRequest).execute();
-                if (analysisApiResponse.isSuccessful()) {
-                    String analysisResponseBody = analysisApiResponse.body() != null ? analysisApiResponse.body().string() : "";
-                    AIResponse analysisAiResponse = gson.fromJson(analysisResponseBody, AIResponse.class);
-                    if (analysisAiResponse.choices != null && analysisAiResponse.choices.length > 0) {
-                        analysisResponse = analysisAiResponse.choices[0].message.content;
-                    }
-                }
-            } catch (Exception e) {
-                BoykaAILogger.error("Error during analysis API call", e);
-                analysisResponse = "Error analyzing tool call results: " + e.getMessage();
+            if (settings.enableOpenai) {
+                String analysisResult = getOpenAIAnalysis(analysisPrompt, availableTools, url, apiKey, model);
+                finalResponse.append("\n\nAnalysis of conversation and tool results:\n").append(analysisResult);
+                conversationHistory.add(new Message("analysis", analysisResult));
+            } else {
+                String analysisResult = getClaudeAnalysis(analysisPrompt, availableTools, url, apiKey, model);
+                finalResponse.append("\n\nAnalysis of conversation and tool results:\n").append(analysisResult);
+                conversationHistory.add(new Message("user", analysisResult));
             }
-
-            finalResponse.append("\n\nAnalysis of tool call results:\n").append(analysisResponse);
 
             return finalResponse.toString();
         } catch (IOException e) {
@@ -224,7 +255,206 @@ public class BoykaAIService {
             return "Error: Failed to parse the API response. Please try again or contact support.";
         }
     }
+    private void processOpenAIResponse(AIResponse aiResponse, StringBuilder finalResponse, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
+        if (aiResponse.choices == null || aiResponse.choices.length == 0) {
+            BoykaAILogger.warn("Received empty choices from OpenAI API");
+            return;
+        }
 
+        for (Choice choice : aiResponse.choices) {
+            if (choice.message != null) {
+                if (choice.message.content != null) {
+                    finalResponse.append(choice.message.content).append("\n");
+                    conversationHistory.add(new Message("assistant", choice.message.content));
+                }
+                if (choice.message.tool_calls != null) {
+                    for (ToolCall toolCall : choice.message.tool_calls) {
+                        if (toolCall.function != null && toolCall.function.name != null) {
+                            String toolResult = executeToolCall(toolCall);
+                            finalResponse.append("工具调用: ").append(toolCall.function.name)
+                                    .append("\n结果: ").append(toolResult).append("\n");
+                            conversationHistory.add(new Message("tool", "Tool: " + toolCall.function.name + "\nResult: " + toolResult));
+                            updateContextIfNeeded(toolCall, toolResult);
+
+                            // 发送工具调用结果回 OpenAI
+                            String followUpResponse = sendToolResultToOpenAI(toolCall, toolResult, availableTools, url, apiKey, model);
+                            finalResponse.append("OpenAI 跟进响应: ").append(followUpResponse).append("\n");
+                            conversationHistory.add(new Message("user", followUpResponse));
+                        } else {
+                            BoykaAILogger.warn("Received invalid tool call from OpenAI API");
+                        }
+                    }
+                }
+            } else {
+                BoykaAILogger.warn("Received choice with null message from OpenAI API");
+            }
+        }
+    }
+
+    private void processClaudeResponse(AIClaudeResponse claudeResponse, StringBuilder finalResponse, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
+        if (claudeResponse.content != null) {
+            for (ContentBlock block : claudeResponse.content) {
+                if (block == null) {
+                    BoykaAILogger.warn("Received null content block from Claude API");
+                    continue;
+                }
+
+                if ("text".equals(block.type)) {
+                    if (block.text != null) {
+                        finalResponse.append(block.text).append("\n");
+                        conversationHistory.add(new Message("assistant", block.text));
+                    } else {
+                        BoykaAILogger.warn("Received text block with null content from Claude API");
+                    }
+                } else if ("tool_use".equals(block.type)) {
+                    if (block.name == null || block.input == null) {
+                        BoykaAILogger.warn("Received invalid tool_use data from Claude API");
+                        continue;
+                    }
+
+                    finalResponse.append("工具调用: ").append(block.name)
+                            .append("\n输入: ").append(gson.toJson(block.input)).append("\n");
+
+                    ToolCall toolCall = new ToolCall();
+                    toolCall.id = block.id;
+                    toolCall.function = new Function();
+                    toolCall.function.name = block.name;
+                    toolCall.function.arguments = gson.toJson(block.input);
+
+                    String toolResult = executeToolCall(toolCall);
+                    finalResponse.append("结果: ").append(toolResult).append("\n");
+
+                    conversationHistory.add(new Message("tool", "Tool: " + block.name +
+                            "\nInput: " + gson.toJson(block.input) +
+                            "\nResult: " + toolResult));
+
+                    updateContextIfNeeded(toolCall, toolResult);
+
+                    // 发送工具调用结果回 Claude
+                    String claudeResponseText = sendToolResultToClaude(block.id, toolResult, url, apiKey, model);
+                    finalResponse.append("Claude 响应: ").append(claudeResponseText).append("\n");
+                    conversationHistory.add(new Message("assistant", claudeResponseText));
+                } else {
+                    BoykaAILogger.warn("Received unknown content type from Claude API: " + block.type);
+                }
+            }
+        } else {
+            BoykaAILogger.warn("Received null content from Claude API");
+        }
+
+        if (claudeResponse.role != null) {
+            conversationHistory.add(new Message(claudeResponse.role, finalResponse.toString()));
+        } else {
+            BoykaAILogger.warn("Received null role from Claude API");
+        }
+    }
+    private String sendToolResultToClaude(String toolUseId, String toolResult, String url, String apiKey, String model) throws IOException {
+        JsonObject jsonBody = new JsonObject();
+        jsonBody.addProperty("model", model);
+
+        JsonArray messages = new JsonArray();
+        JsonObject userMessage = new JsonObject();
+        userMessage.addProperty("role", "user");
+
+        JsonArray content = new JsonArray();
+        JsonObject toolResultObj = new JsonObject();
+        toolResultObj.addProperty("type", "tool_result");
+        toolResultObj.addProperty("tool_use_id", toolUseId);
+        toolResultObj.addProperty("content", toolResult);
+        content.add(toolResultObj);
+
+        userMessage.add("content", content);
+        messages.add(userMessage);
+
+        jsonBody.add("messages", messages);
+
+        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
+
+        Request request = new Request.Builder()
+                .url(url)
+                .post(body)
+                .addHeader("x-api-key", apiKey)
+                .addHeader("anthropic-version", "2023-06-01")
+                .addHeader("content-type", "application/json")
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("sendToolResultToClaude Unexpected code " + response);
+            }
+
+            String responseBody = response.body() != null ? response.body().string() : "";
+            AIClaudeResponse claudeResponse = gson.fromJson(responseBody, AIClaudeResponse.class);
+
+            // 返回 Claude 的响应文本
+            return claudeResponse.content.get(0).text;
+        }
+    }
+    private String sendToolResultToOpenAI(ToolCall toolCall, String toolResult, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
+        JsonObject jsonBody = new JsonObject();
+        jsonBody.addProperty("model", model);
+
+        JsonArray messages = new JsonArray();
+        for (Message message : conversationHistory) {
+            JsonObject messageObject = new JsonObject();
+            messageObject.addProperty("role", message.role);
+            messageObject.addProperty("content", message.content);
+            messages.add(messageObject);
+        }
+
+        JsonObject toolResultMessage = new JsonObject();
+        toolResultMessage.addProperty("role", "function");
+        toolResultMessage.addProperty("name", toolCall.function.name);
+        toolResultMessage.addProperty("content", toolResult);
+        messages.add(toolResultMessage);
+
+        jsonBody.add("messages", messages);
+
+        JsonArray toolsArray = new JsonArray();
+        for (Tool tool : availableTools) {
+            toolsArray.add(tool.toOpenAIFormat());
+        }
+        jsonBody.add("tools", toolsArray);
+
+        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
+
+        Request request = new Request.Builder()
+                .url(url)
+                .post(body)
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("content-type", "application/json")
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("Unexpected code " + response);
+            }
+
+            String responseBody = response.body() != null ? response.body().string() : "";
+            AIResponse openAIResponse = gson.fromJson(responseBody, AIResponse.class);
+
+            // 返回 OpenAI 的响应文本
+            return openAIResponse.choices[0].message.content;
+        }
+    }
+    private void updateContextIfNeeded(ToolCall toolCall, String toolResult) {
+        if (toolCall.function.name.equals("read_file") || toolCall.function.name.equals("create_file")) {
+            JsonObject args = gson.fromJson(toolCall.function.arguments, JsonObject.class);
+            String filePath = args.get("path").getAsString();
+            contextManager.updateFileContent(filePath, toolResult);
+        }
+    }
+    private String getConversationHistoryString() {
+        StringBuilder history = new StringBuilder();
+        for (Message message : conversationHistory) {
+            history.append(message.role).append(": ").append(message.content).append("\n\n");
+        }
+        return history.toString();
+    }
+
+    public void clearConversationHistory() {
+        conversationHistory.clear();
+    }
     private String createPrompt(String userMessage, String context, List<Tool> availableTools) {
         StringBuilder prompt = new StringBuilder(BASE_SYSTEM_PROMPT);
         prompt.append("\n\nCurrent context:\n").append(context);
@@ -238,7 +468,7 @@ public class BoykaAIService {
 
     private String executeToolCall(ToolCall toolCall) {
         try {
-            JsonObject args = gson.fromJson(toolCall.arguments, JsonObject.class);
+            JsonObject args = gson.fromJson(toolCall.function.arguments, JsonObject.class);
             switch (toolCall.function.name) {
                 case "create_file":
                     return fileTools.createFile(args.get("path").getAsString(), args.get("content").getAsString());
@@ -270,99 +500,70 @@ public class BoykaAIService {
         }
     }
 
-    public void runAutoMode(String initialGoal, int maxIterations) {
-        for (int i = 0; i < maxIterations; i++) {
-            String iterationInfo = "You are currently on iteration " + (i + 1) + " out of " + maxIterations + " in automode.";
-            String context = contextManager.getFullContext();
-            String systemPrompt = BASE_SYSTEM_PROMPT + "\n\n" + AUTOMODE_SYSTEM_PROMPT.replace("{iteration_info}", iterationInfo);
+//    public void runAutoMode(String initialGoal, int maxIterations) {
+//        for (int i = 0; i < maxIterations; i++) {
+//            String iterationInfo = "You are currently on iteration " + (i + 1) + " out of " + maxIterations + " in automode.";
+//            String context = contextManager.getFullContext();
+//            String systemPrompt = BASE_SYSTEM_PROMPT + "\n\n" + AUTOMODE_SYSTEM_PROMPT.replace("{iteration_info}", iterationInfo);
+//
+//            List<Tool> availableTools = createAvailableTools();
+//            String response = getAIResponse(initialGoal, "OpenAI", availableTools, context, settings.selectedModel);
+//
+//            // Process response, execute tool calls, etc.
+//            if (response.contains("AUTOMODE_COMPLETE")) {
+//                break;
+//            }
+//            initialGoal = "Continue with the next step.";
+//        }
+//    }
 
-            List<Tool> availableTools = createAvailableTools();
-            String response = getAIResponse(initialGoal, "OpenAI", availableTools, context, settings.selectedModel);
+    private String getOpenAIAnalysis(String analysisPrompt, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
+        AIRequest analysisRequest = new AIRequest(analysisPrompt, availableTools, model);
+        RequestBody analysisBody = RequestBody.create(MediaType.parse("application/json"), gson.toJson(analysisRequest));
 
-            // Process response, execute tool calls, etc.
-            if (response.contains("AUTOMODE_COMPLETE")) {
-                break;
+        Request analysisApiRequest = new Request.Builder()
+                .url(url)
+                .post(analysisBody)
+                .addHeader("content-type", "application/json")
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .build();
+
+        try (Response analysisResponse = client.newCall(analysisApiRequest).execute()) {
+            if (analysisResponse.isSuccessful()) {
+                String analysisResponseBody = analysisResponse.body() != null ? analysisResponse.body().string() : "";
+                AIResponse analysisAiResponse = gson.fromJson(analysisResponseBody, AIResponse.class);
+                if (analysisAiResponse.choices != null && analysisAiResponse.choices.length > 0) {
+                    return analysisAiResponse.choices[0].message.content;
+                }
             }
-            initialGoal = "Continue with the next step.";
+            BoykaAILogger.error("Analysis API request failed", new IOException("Unexpected code " + analysisResponse.code()));
         }
+        return "Failed to analyze the conversation and tool results.";
     }
 
-    private List<Tool> createAvailableTools() {
-        List<Tool> tools = new ArrayList<>();
+    private String getClaudeAnalysis(String analysisPrompt, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
+        AIRequest analysisRequest = new AIRequest(analysisPrompt, availableTools, model);
+        RequestBody analysisBody = RequestBody.create(MediaType.parse("application/json"), gson.toJson(analysisRequest));
 
-        // Create File Tool
-        JsonObject createFileSchema = new JsonObject();
-        JsonObject createFileProperties = new JsonObject();
-        createFileProperties.addProperty("path", "string");
-        createFileProperties.addProperty("content", "string");
-        createFileSchema.add("properties", createFileProperties);
-        createFileSchema.add("required", gson.toJsonTree(new String[]{"path", "content"}));
-        tools.add(new Tool("create_file",
-                "在指定路径创具有给定内容的新文件。当需要在项目结构中创建新文件时使用此工具。如果不存在，它将创建所有必要的父目录。如果文件创建成，工具将返回成功消息，如果创建文件时出现问题或文件已存在，则返回错误消息。内容应尽可能完整和有用，包括必要的导入、函数定义和注释。",
-                createFileSchema));
+        Request analysisApiRequest = new Request.Builder()
+                .url(url)
+                .post(analysisBody)
+                .addHeader("content-type", "application/json")
+                .addHeader("x-api-key", apiKey)
+                .addHeader("anthropic-version", "2023-06-01")
+                .build();
 
-        // Edit and Apply Tool
-        JsonObject editAndApplySchema = new JsonObject();
-        JsonObject editAndApplyProperties = new JsonObject();
-        editAndApplyProperties.addProperty("path", "string");
-        editAndApplyProperties.addProperty("instructions", "string");
-        editAndApplyProperties.addProperty("project_context", "string");
-        editAndApplySchema.add("properties", editAndApplyProperties);
-        editAndApplySchema.add("required", gson.toJsonTree(new String[]{"path", "instructions", "project_context"}));
-        tools.add(new Tool("edit_and_apply",
-                "根据特定指令和详细的项目上下文对文件应用AI驱动的改进。此函数读取文件，使用带有对话历史和全面代码相关项目上下文的AI分批处理它。它生成差异并允许用户在应用更改之前确认。目是保持一致性并防止破坏文件之间的连接。此工具应用需要理解更广泛项目上下文的复杂代码修改。",
-                editAndApplySchema));
-
-        // Execute Code Tool
-        JsonObject executeCodeSchema = new JsonObject();
-        JsonObject executeCodeProperties = new JsonObject();
-        executeCodeProperties.addProperty("code", "string");
-        executeCodeSchema.add("properties", executeCodeProperties);
-        executeCodeSchema.add("required", gson.toJsonTree(new String[]{"code"}));
-        tools.add(new Tool("execute_code",
-                "在'code_execution_env'虚拟环境中执行Python代码并返回输出。当需要运行代码并查看其输出或检查错误时使用此工具。所有代码执行都专门在这个隔离环境中进行。该工具将返回执行代码的标准输出、标准错误和返回代码。长时间运行的进程将返回进程ID以便后续管理。",
-                executeCodeSchema));
-
-        // Stop Process Tool
-        JsonObject stopProcessSchema = new JsonObject();
-        JsonObject stopProcessProperties = new JsonObject();
-        stopProcessProperties.addProperty("process_id", "string");
-        stopProcessSchema.add("properties", stopProcessProperties);
-        stopProcessSchema.add("required", gson.toJsonTree(new String[]{"process_id"}));
-        tools.add(new Tool("stop_process",
-                "通过其ID停止运行的进程。此工具用于终止由execute_code工具启动的长时间运行的进程。它将尝试优雅地停止进程，但如果必要，可能会强制终。如果进程被停止，工具将返回成消息，如果进程不存在或无法停止，则返回错误消息。",
-                stopProcessSchema));
-
-        // Read File Tool
-        JsonObject readFileSchema = new JsonObject();
-        JsonObject readFileProperties = new JsonObject();
-        readFileProperties.addProperty("path", "string");
-        readFileSchema.add("properties", readFileProperties);
-        readFileSchema.add("required", gson.toJsonTree(new String[]{"path"}));
-        tools.add(new Tool("read_file",
-                "读取指定路径的文件内容。当需要检查现有文件的内容时使用此工具。它将返回文件的全部内容作为字符串。如果文件不存在或无法读取，将返回适当的错误消息。",
-                readFileSchema));
-
-        // Read Multiple Files Tool
-        JsonObject readMultipleFilesSchema = new JsonObject();
-        JsonObject readMultipleFilesProperties = new JsonObject();
-        readMultipleFilesProperties.add("paths", gson.toJsonTree(new JsonArray()));
-        readMultipleFilesSchema.add("properties", readMultipleFilesProperties);
-        readMultipleFilesSchema.add("required", gson.toJsonTree(new String[]{"paths"}));
-        tools.add(new Tool("read_multiple_files",
-                "读取指定路径的多个文件的内容。当需一次检查多个现有文件的容时使用此工具。它将返回读取每个文件的状态，并将成��读取的文件内容存储在系统提示中。如果文件不存在或无法读取，将为该文件返回适当的错误消息。",
-                readMultipleFilesSchema));
-
-        // List Files Tool
-        JsonObject listFilesSchema = new JsonObject();
-        JsonObject listFilesProperties = new JsonObject();
-        listFilesProperties.addProperty("path", "string");
-        listFilesSchema.add("properties", listFilesProperties);
-        tools.add(new Tool("list_files",
-                "列出指定文件夹中的所有文件和目录。当需要查看目录内容时使用此工具。它将返回指定路径中所有文件和子目录的列表。如果目录不存在或无法读取，将返回适当的错误消息。",
-                listFilesSchema));
-
-        return tools;
+        try (Response analysisResponse = client.newCall(analysisApiRequest).execute()) {
+            if (analysisResponse.isSuccessful()) {
+                String analysisResponseBody = analysisResponse.body() != null ? analysisResponse.body().string() : "";
+                AIClaudeResponse analysisClaudeResponse = gson.fromJson(analysisResponseBody, AIClaudeResponse.class);
+                if (analysisClaudeResponse.content != null && !analysisClaudeResponse.content.isEmpty()) {
+                    return analysisClaudeResponse.content.get(0).text;
+                }
+            }
+            BoykaAILogger.error("Analysis API request failed", new IOException("Unexpected code " + analysisResponse.code()));
+        }
+        return "Failed to analyze the conversation and tool results.";
     }
 
     // Inner classes for request/response handling
@@ -378,31 +579,85 @@ public class BoykaAIService {
         }
     }
 
-    private static class AIResponse {
-        Choice[] choices;
-    }
-
-    private static class Choice {
-        Message message;
-        List<ToolCall> toolCalls;
-    }
-
-    private static class Message {
+    private static class AIClaudeResponse {
+        String id;
+        String type;
         String role;
-        String content;
+        String model;
+        List<ContentBlock> content;
+        String stop_reason;
+        String stop_sequence;
+        Usage usage;
 
-        Message(String role, String content) {
-            this.role = role;
-            this.content = content;
+        static class Usage {
+            int input_tokens;
+            int output_tokens;
         }
     }
 
+    private static class ContentBlock {
+        String type;
+        String text;
+        String id;
+        String name;
+        JsonObject input;
+    }
+    private static class AIResponse {
+        String id;
+        String object;
+        long created;
+        String model;
+        Choice[] choices;
+        Usage usage;
+        String system_fingerprint;
+
+        // Claude 特有字段
+        String stop_reason;
+        String role;
+
+        // 新增内部类
+        static class Usage {
+            int prompt_tokens;
+            int completion_tokens;
+            int total_tokens;
+        }
+    }
+    private static class Choice {
+        int index;
+        Message message;
+        String logprobs;
+        String finish_reason;
+
+        // Claude 特有字段
+        List<ContentBlock> content;
+    }
+    private static class Message {
+        String role;
+        String content;
+        List<ToolCall> tool_calls;
+
+        // 构造函数
+        Message(String role, String content) {
+            this.role = role;
+            this.content = content;
+            this.tool_calls = null;
+        }
+
+        // 带有 tool_calls 的构造函数
+        Message(String role, String content, List<ToolCall> tool_calls) {
+            this.role = role;
+            this.content = content;
+            this.tool_calls = tool_calls;
+        }
+    }
     private static class ToolCall {
+        String id;
+        String type;
         Function function;
+    }
+    private static class Function {
+        String name;
         String arguments;
     }
 
-    private static class Function {
-        String name;
-    }
 }

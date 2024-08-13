@@ -1,5 +1,6 @@
 package com.dobest1.boyka;
 
+import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.ui.components.*;
@@ -26,7 +27,7 @@ import okhttp3.Response;
 import java.io.IOException;
 
 public class BoykaAIToolWindowContent {
-    private final Project project;  // Added project field
+    private  Project project;  // Added project field
     private JPanel myToolWindowContent;
     private JBTabbedPane tabbedPane;
     private JBTextArea chatHistory;
@@ -50,27 +51,32 @@ public class BoykaAIToolWindowContent {
     private OkHttpClient client = new OkHttpClient();
 
     public BoykaAIToolWindowContent(Project project, ToolWindow toolWindow) {
-        this.project = project;  // Initialize project field
-        myToolWindowContent = new JPanel(new BorderLayout());
-        tabbedPane = new JBTabbedPane();
+        try {
+            this.project = project;  // Initialize project field
+            myToolWindowContent = new JPanel(new BorderLayout());
+            tabbedPane = new JBTabbedPane();
 
-        // Chat tab
-        JPanel chatPanel = createChatPanel();
-        tabbedPane.addTab("聊天", chatPanel);
+            // Chat tab
+            JPanel chatPanel = createChatPanel();
+            tabbedPane.addTab("聊天", chatPanel);
 
-        // Context tab
-        JPanel contextPanel = createContextPanel(project);
-        tabbedPane.addTab("上下文", contextPanel);
+            // Context tab
+            JPanel contextPanel = createContextPanel(project);
+            tabbedPane.addTab("上下文", contextPanel);
 
-        // Settings tab
-        JPanel settingsPanel = createSettingsPanel();
-        tabbedPane.addTab("设置", settingsPanel);
+            // Settings tab
+            JPanel settingsPanel = createSettingsPanel();
+            tabbedPane.addTab("设置", settingsPanel);
 
-        myToolWindowContent.add(tabbedPane, BorderLayout.CENTER);
+            myToolWindowContent.add(tabbedPane, BorderLayout.CENTER);
 
-        fileTools = new BoykaAIFileTools(project);
-        contextManager = new ContextManager(project);  // 创建 ContextManager 实例
-        aiService = new BoykaAIService(fileTools, contextManager);  // 传入两个参数
+            fileTools = new BoykaAIFileTools(project);
+            contextManager = new ContextManager(project);  // 创建 ContextManager 实例
+            aiService = new BoykaAIService(fileTools, contextManager);  // 传入两个参数
+        }
+        catch (Exception e){
+            BoykaAILogger.error("Error creating BoykaAI tool window content", e);
+        }
     }
 
     private JPanel createChatPanel() {
@@ -173,59 +179,47 @@ public class BoykaAIToolWindowContent {
     }
 
     private JPanel createSettingsPanel() {
-        JPanel settingsPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridwidth = GridBagConstraints.REMAINDER;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(5, 5, 5, 5);
+        try {
+            BoykaAIConfigurable configurable = new BoykaAIConfigurable();
+            JComponent settingsComponent = configurable.createComponent();
 
-        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+            // 创建一个新的 JPanel 来包含设置组件和保存按钮
+            JPanel settingsPanel = new JPanel(new BorderLayout());
+            settingsPanel.add(settingsComponent, BorderLayout.CENTER);
 
-        openAIBaseAddressField = new JBTextField(settings.openAIBaseAddress);
-        openAIKeyField = new JBTextField(settings.openAIKey);
-        claudeAddressField = new JBTextField(settings.claudeAddress);
-        claudeKeyField = new JBTextField(settings.claudeKey);
+            // 获取刷新按钮和模型选择器
+            refreshModelsButton = configurable.getRefreshModelsButton();
+            modelSelector = configurable.getOpenAIModelSelector();
 
-        JPanel modelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        modelSelector = new ComboBox<>(new DefaultComboBoxModel<>());
-        refreshModelsButton = new JButton("刷新模型列表");
-        modelPanel.add(new JLabel("选择模型:"));
-        modelPanel.add(modelSelector);
-        modelPanel.add(refreshModelsButton);
+            // 添加刷新模型列表的功能
+            refreshModelsButton.addActionListener(e -> refreshModels());
 
-        settingsPanel.add(modelPanel, gbc);
+            // 创建一个面板来容纳保存按钮
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            JButton saveButton = new JButton("保存设置");
+            saveButton.addActionListener(e -> saveSettings(configurable));
+            buttonPanel.add(saveButton);
 
-        refreshModelsButton.addActionListener(e -> refreshModels());
+            // 将按钮面板添加到设置面板的底部
+            settingsPanel.add(buttonPanel, BorderLayout.SOUTH);
 
-        settingsPanel.add(new JLabel("OpenAI 基础地址:"), gbc);
-        settingsPanel.add(openAIBaseAddressField, gbc);
-        settingsPanel.add(new JLabel("OpenAI API 密钥:"), gbc);
-        settingsPanel.add(openAIKeyField, gbc);
-        settingsPanel.add(new JLabel("Claude 地址:"), gbc);
-        settingsPanel.add(claudeAddressField, gbc);
-        settingsPanel.add(new JLabel("Claude API 密钥:"), gbc);
-        settingsPanel.add(claudeKeyField, gbc);
-
-        JButton saveButton = new JButton("保存设置");
-        saveButton.addActionListener(e -> saveSettings());
-        settingsPanel.add(saveButton, gbc);
-
-        return settingsPanel;
+            return settingsPanel;
+        } catch (Exception e) {
+            e.printStackTrace();
+            BoykaAILogger.error("Error creating settings panel", e);
+            return null;
+        }
     }
-
-    private void saveSettings() {
-        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
-        settings.openAIBaseAddress = openAIBaseAddressField.getText();
-        settings.openAIKey = openAIKeyField.getText();
-        settings.claudeAddress = claudeAddressField.getText();
-        settings.claudeKey = claudeKeyField.getText();
-        settings.selectedModel = (String) modelSelector.getSelectedItem();
-        BoykaAISettings.getInstance().loadState(settings);
-
-        // 更新 aiService 的设置
-        aiService.updateSettings(settings);
-        updateChatTabTitle();  // 更新聊天选项卡标题
-        JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
+    private void saveSettings(BoykaAIConfigurable configurable) {
+        try {
+            configurable.apply();
+            BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+            aiService.updateSettings(settings);
+            updateChatTabTitle();
+            JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
+        } catch (ConfigurationException e) {
+            JOptionPane.showMessageDialog(myToolWindowContent, "保存设置失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     public JComponent getContent() {
@@ -233,35 +227,45 @@ public class BoykaAIToolWindowContent {
     }
 
     private void sendMessage() {
-        if (!aiService.validateSettings()) {
-            Messages.showErrorDialog(project, "API设置无效。请检查您的OpenAI基础地址和API密钥。", "设置错误");
-            return;
-        }
+//        if (!aiService.validateSettings()) {
+//            Messages.showErrorDialog(project, "API设置无效。请检查您的OpenAI基础地址和API密钥。", "设置错误");
+//            return;
+//        }
         String message = inputField.getText();
         if (!message.isEmpty()) {
             chatHistory.append("你: " + message + "\n");
-
-            ProgressManager.getInstance().run(new Task.Backgroundable(project, "正在获取AI响应") {
-                @Override
-                public void run(@NotNull ProgressIndicator indicator) {
-                    indicator.setIndeterminate(true);
-                    List<Tool> availableTools = createAvailableTools();
-                    String context = getContext();
-                    String selectedModel = (String) modelSelector.getSelectedItem();
-                    String aiResponse = aiService.getAIResponse(message, "OpenAI", availableTools, context, selectedModel);
-                    SwingUtilities.invokeLater(() -> {
-                        if (aiResponse.startsWith("Error:")) {
-                            chatHistory.append("AI: 抱歉，发生了一个错误。\n");
-                            chatHistory.append(aiResponse + "\n");
-                            Messages.showErrorDialog(project, aiResponse, "AI响应错误");
+            try{
+                ProgressManager.getInstance().run(new Task.Backgroundable(project, "正在获取AI响应") {
+                    @Override
+                    public void run(@NotNull ProgressIndicator indicator) {
+                        indicator.setIndeterminate(true);
+                        List<Tool> availableTools = createAvailableTools();
+                        String context = getContext();
+                        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+                        String aiResponse = "";
+                        if (settings.enableClaude) {
+                            aiResponse = aiService.getAIResponse(message, availableTools, context, settings.claudeModel);
                         } else {
-                            chatHistory.append("AI: " + aiResponse + "\n");
+                            aiResponse = aiService.getAIResponse(message, availableTools, context, modelSelector.getSelectedItem().toString());
                         }
-                        inputField.setText("");
-                        updateChatTabTitle();
-                    });
-                }
-            });
+                        String finalAiResponse = aiResponse;
+                        SwingUtilities.invokeLater(() -> {
+                            if (finalAiResponse.startsWith("Error:")) {
+                                chatHistory.append("AI: 抱歉，发生了一个错误。\n");
+                                chatHistory.append(finalAiResponse + "\n");
+                                Messages.showErrorDialog(project, finalAiResponse, "AI响应错误");
+                            } else {
+                                chatHistory.append("AI: " + finalAiResponse + "\n");
+                            }
+                            inputField.setText("");
+                            updateChatTabTitle();
+                        });
+                    }
+                });
+            }catch (Exception e){
+                BoykaAILogger.error("Error sending message", e);
+            }
+
         }
     }
 
@@ -275,82 +279,109 @@ public class BoykaAIToolWindowContent {
     }
     private List<Tool> createAvailableTools() {
         List<Tool> tools = new ArrayList<>();
-        
+
         // Create File Tool
-        JsonObject createFileSchema = new JsonObject();
         JsonObject createFileProperties = new JsonObject();
-        createFileProperties.addProperty("path", "string");
-        createFileProperties.addProperty("content", "string");
-        createFileSchema.add("properties", createFileProperties);
-        createFileSchema.add("required", gson.toJsonTree(new String[]{"path", "content"}));
-        tools.add(new Tool("create_file", 
-            "在指定路径创具有给定内容的新文件。当需要在项目结构中创建新文件时使用此工具。如果不存在，它将创建所有必要的父目录。如果文件创建成，工具将返回成功消息，如果创建文件时出现问题或文件已存在，则返回错误消息。内容应尽可能完整和有用，包括必要的导入、函数定义和注释。",
-            createFileSchema));
+        JsonObject pathProperty = new JsonObject();
+        pathProperty.addProperty("type", "string");
+        pathProperty.addProperty("description", "指定创建文件的路径");
+        createFileProperties.add("path", pathProperty);
+        JsonObject contentProperty = new JsonObject();
+        contentProperty.addProperty("type", "string");
+        contentProperty.addProperty("description", "文件的内容");
+        createFileProperties.add("content", contentProperty);
+        tools.add(new Tool("create_file",
+                "在指定路径创建具有给定内容的新文件。当需要在项目结构中创建新文件时使用此工具。如果不存在，它将创建所有必要的父目录。如果文件创建成功，工具将返回成功消息，如果创建文件时出现问题或文件已存在，则返回错误消息。内容应尽可能完整和有用，包括必要的导入、函数定义和注释。",
+                createFileProperties,
+                new String[]{"path", "content"}));
 
         // Edit and Apply Tool
-        JsonObject editAndApplySchema = new JsonObject();
         JsonObject editAndApplyProperties = new JsonObject();
-        editAndApplyProperties.addProperty("path", "string");
-        editAndApplyProperties.addProperty("instructions", "string");
-        editAndApplyProperties.addProperty("project_context", "string");
-        editAndApplySchema.add("properties", editAndApplyProperties);
-        editAndApplySchema.add("required", gson.toJsonTree(new String[]{"path", "instructions", "project_context"}));
-        tools.add(new Tool("edit_and_apply", 
-            "根据特定指令和详细的项目上下文对文件应用AI驱动的改进。此函数读取文件，使用带有对话历史和全面代码相关项目上下文的AI分批处理它。它生成差异并允许用户在应用更改之前确认。目是保持一致性并防止破坏文件之间的连接。此工具应用需要理解更广泛项目上下文的复杂代码修改。",
-            editAndApplySchema));
+        JsonObject editPathProperty = new JsonObject();
+        editPathProperty.addProperty("type", "string");
+        editPathProperty.addProperty("description", "要编辑的文件路径");
+        editAndApplyProperties.add("path", editPathProperty);
+        JsonObject instructionsProperty = new JsonObject();
+        instructionsProperty.addProperty("type", "string");
+        instructionsProperty.addProperty("description", "编辑指令");
+        editAndApplyProperties.add("instructions", instructionsProperty);
+        JsonObject projectContextProperty = new JsonObject();
+        projectContextProperty.addProperty("type", "string");
+        projectContextProperty.addProperty("description", "项目上下文信息");
+        editAndApplyProperties.add("project_context", projectContextProperty);
+        tools.add(new Tool("edit_and_apply",
+                "根据特定指令和详细的项目上下文对文件应用AI驱动的改进。此函数读取文件，使用带有对话历史和全面代码相关项目上下文的AI分批处理它。它生成差异并允许用户在应用更改之前确认。目标是保持一致性并防止破坏文件之间的连接。此工具应用需要理解更广泛项目上下文的复杂代码修改。",
+                editAndApplyProperties,
+                new String[]{"path", "instructions", "project_context"}));
 
         // Execute Code Tool
-        JsonObject executeCodeSchema = new JsonObject();
         JsonObject executeCodeProperties = new JsonObject();
-        executeCodeProperties.addProperty("code", "string");
-        executeCodeSchema.add("properties", executeCodeProperties);
-        executeCodeSchema.add("required", gson.toJsonTree(new String[]{"code"}));
-        tools.add(new Tool("execute_code", 
-            "在'code_execution_env'虚拟环境中执行Python代码并返回输出。当需要运行代码并查看其输出或检查错误时使用此工具。所有代码执行都专门在这个隔离环境中进行。该工具将返回执行代码的标准输出、标准错误和返回代码。长时间运行的进程将返回进程ID以便后续管理。",
-            executeCodeSchema));
+        JsonObject codeProperty = new JsonObject();
+        codeProperty.addProperty("type", "string");
+        codeProperty.addProperty("description", "要执行的Python代码");
+        executeCodeProperties.add("code", codeProperty);
+        tools.add(new Tool("execute_code",
+                "在'code_execution_env'虚拟环境中执行Python代码并返回输出。当需要运行代码并查看其输出或检查错误时使用此工具。所有代码执行都专门在这个隔离环境中进行。该工具将返回执行代码的标准输出、标准错误和返回代码。长时间运行的进程将返回进程ID以便后续管理。",
+                executeCodeProperties,
+                new String[]{"code"}));
 
         // Stop Process Tool
-        JsonObject stopProcessSchema = new JsonObject();
         JsonObject stopProcessProperties = new JsonObject();
-        stopProcessProperties.addProperty("process_id", "string");
-        stopProcessSchema.add("properties", stopProcessProperties);
-        stopProcessSchema.add("required", gson.toJsonTree(new String[]{"process_id"}));
-        tools.add(new Tool("stop_process", 
-            "通过其ID停止运行的进程。此工具用于终止由execute_code工具启动的长时间运行的进程。它将尝试优雅地停止进程，但如果必要，可能会强制终。如果进程被停止，工具将返回成消息，如果进程不存在或无法停止，则返回错误消息。",
-            stopProcessSchema));
+        JsonObject processIdProperty = new JsonObject();
+        processIdProperty.addProperty("type", "string");
+        processIdProperty.addProperty("description", "要停止的进程ID");
+        stopProcessProperties.add("process_id", processIdProperty);
+        tools.add(new Tool("stop_process",
+                "通过其ID停止运行的进程。此工具用于终止由execute_code工具启动的长时间运行的进程。它将尝试优雅地停止进程，但如果必要，可能会强制终止。如果进程被停止，工具将返回成功消息，如果进程不存在或无法停止，则返回错误消息。",
+                stopProcessProperties,
+                new String[]{"process_id"}));
 
         // Read File Tool
-        JsonObject readFileSchema = new JsonObject();
         JsonObject readFileProperties = new JsonObject();
-        readFileProperties.addProperty("path", "string");
-        readFileSchema.add("properties", readFileProperties);
-        readFileSchema.add("required", gson.toJsonTree(new String[]{"path"}));
-        tools.add(new Tool("read_file", 
-            "读取指定路径的文件内容。当需要检查现有文件的内容时使用此工具。它将返回文件的全部内容作为字符串。如果文件不存在或无法读取，将返回适当的错误消息。",
-            readFileSchema));
+        JsonObject readPathProperty = new JsonObject();
+        readPathProperty.addProperty("type", "string");
+        readPathProperty.addProperty("description", "要读取的文件路径");
+        readFileProperties.add("path", readPathProperty);
+        tools.add(new Tool("read_file",
+                "读取指定路径的文件内容。当需要检查现有文件的内容时使用此工具。它将返回文件的全部内容作为字符串。如果文件不存在或无法读取，将返回适当的错误消息。",
+                readFileProperties,
+                new String[]{"path"}));
 
-        // Read Multiple Files Tool
-        JsonObject readMultipleFilesSchema = new JsonObject();
-        JsonObject readMultipleFilesProperties = new JsonObject();
-        readMultipleFilesProperties.add("paths", gson.toJsonTree(new JsonArray()));
-        readMultipleFilesSchema.add("properties", readMultipleFilesProperties);
-        readMultipleFilesSchema.add("required", gson.toJsonTree(new String[]{"paths"}));
-        tools.add(new Tool("read_multiple_files", 
-            "读取指定路径的多个文件的内容。当需一次检查多个现有文件的容时使用此工具。它将返回读取每个文件的状态，并将成��读取的文件内容存储在系统提示中。如果文件不存在或无法读取，将为该文件返回适当的错误消息。",
-            readMultipleFilesSchema));
-
+// Read Multiple Files Tool
+//        JsonObject readMultipleFilesSchema = new JsonObject();
+//        readMultipleFilesSchema.addProperty("type", "object");
+//
+//        JsonObject properties = new JsonObject();
+//        JsonObject pathsProperty = new JsonObject();
+//        pathsProperty.addProperty("type", "array");
+//
+//        JsonObject items = new JsonObject();
+//        items.addProperty("type", "string");
+//        pathsProperty.add("items", items);
+//
+//        pathsProperty.addProperty("description", "要读取的文件路径列表。使用正斜杠(/)作为路径分隔符，即使在Windows系统上也是如此。");
+//        properties.add("paths", pathsProperty);
+//
+//        readMultipleFilesSchema.add("properties", properties);
+//        readMultipleFilesSchema.add("required", gson.toJsonTree(new String[]{"paths"}));
+//
+//        tools.add(new Tool("read_multiple_files",
+//                "读取指定路径的多个文件的内容。当需要一次检查多个现有文件的内容时使用此工具。它将返回读取每个文件的状态，并将成功读取的文件内容存储在系统提示中。如果文件不存在或无法读取，将为该文件返回适当的错误消息。",
+//                readMultipleFilesSchema,
+//                new String[]{"paths"}));
         // List Files Tool
-        JsonObject listFilesSchema = new JsonObject();
         JsonObject listFilesProperties = new JsonObject();
-        listFilesProperties.addProperty("path", "string");
-        listFilesSchema.add("properties", listFilesProperties);
-        tools.add(new Tool("list_files", 
-            "列出指定文件夹中的所有文件和目录。当需要查看目录内容时使用此工具。它将返回指定路径中所有文件和子目录的列表。如果目录不存在或无法读取，将返回适当的错误消息。",
-            listFilesSchema));
+        JsonObject listPathProperty = new JsonObject();
+        listPathProperty.addProperty("type", "string");
+        listPathProperty.addProperty("description", "要列出内容的文件夹路径");
+        listFilesProperties.add("path", listPathProperty);
+        tools.add(new Tool("list_files",
+                "列出指定文件夹中的所有文件和目录。当需要查看目录内容时使用此工具。它将返回指定路径中所有文件和子目录的列表。如果目录不存在或无法读取，将返回适当的错误消息。",
+                listFilesProperties,
+                new String[]{"path"}));
 
         return tools;
     }
-
     private void refreshModels() {
         ProgressManager.getInstance().run(new Task.Backgroundable(project, "正在刷新模型列表") {
             @Override
@@ -406,5 +437,9 @@ public class BoykaAIToolWindowContent {
         SwingUtilities.invokeLater(() -> {
             Messages.showErrorDialog(project, message, "Boyka AI Error");
         });
+    }
+    private void clearConversation() {
+        aiService.clearConversationHistory();
+        chatHistory.setText("");
     }
 }

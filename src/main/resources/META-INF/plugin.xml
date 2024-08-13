@@ -3,7 +3,7 @@
     <name>Boyka AI Assistant</name>
     <vendor email="support@dobest1.com" url="https://www.dobest1.com">dobest1</vendor>
         <!-- 其他配置 -->
-    <version>1.0.3</version> <!-- 增加版本号 -->
+    <version>1.0.7</version> <!-- 增加版本号 -->
     <description><![CDATA[
     Boyka AI Assistant is an intelligent coding companion that integrates AI-powered assistance into your development workflow.
     Features:
