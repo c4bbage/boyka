@@ -129,6 +129,7 @@ public class BoykaAIFileTools {
             return new String(Files.readAllBytes(filePath));
         } catch (IOException e) {
             // 使用日志记录错误
+            BoykaAILogger.error("读取文件失败", e);
             return "";
         }
     }

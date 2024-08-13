@@ -69,8 +69,8 @@ public class BoykaAIToolWindowContent {
         myToolWindowContent.add(tabbedPane, BorderLayout.CENTER);
 
         fileTools = new BoykaAIFileTools(project);
-        aiService = new BoykaAIService(fileTools);
-        contextManager = new ContextManager(project);
+        contextManager = new ContextManager(project);  // 创建 ContextManager 实例
+        aiService = new BoykaAIService(fileTools, contextManager);  // 传入两个参数
     }
 
     private JPanel createChatPanel() {
@@ -224,7 +224,7 @@ public class BoykaAIToolWindowContent {
 
         // 更新 aiService 的设置
         aiService.updateSettings(settings);
-
+        updateChatTabTitle();  // 更新聊天选项卡标题
         JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
     }
 
