@@ -277,7 +277,7 @@ public class BoykaAIToolWindowContent {
         }
         return contextBuilder.toString();
     }
-    private List<Tool> createAvailableTools() {
+    public static List<Tool> createAvailableTools() {
         List<Tool> tools = new ArrayList<>();
 
         // Create File Tool

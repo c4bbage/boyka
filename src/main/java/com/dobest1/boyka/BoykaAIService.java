@@ -90,7 +90,8 @@ public class BoykaAIService {
     private final BoykaAIFileTools fileTools;
     private final ContextManager contextManager;
     private BoykaAISettings.State settings;
-
+    private final ClaudeClient claudeClient;
+    private final List<Tool> availableTools;
     public BoykaAIService(BoykaAIFileTools fileTools, ContextManager contextManager) {
         this.fileTools = fileTools;
         this.contextManager = contextManager;
@@ -101,6 +102,16 @@ public class BoykaAIService {
                 .build();
         this.gson = new Gson();
         this.settings = BoykaAISettings.getInstance().getState();
+
+        this.availableTools = BoykaAIToolWindowContent.createAvailableTools();
+
+        ClaudeConfig claudeConfig = new ClaudeConfig.Builder()
+                .apiKey(settings.claudeKey)
+                .apiUrl(settings.claudeAddress)
+                .model(settings.claudeModel)
+                .maxTokens(settings.maxTokens)
+                .build();
+        this.claudeClient = new ClaudeClient(claudeConfig);
     }
 
     public void updateSettings(BoykaAISettings.State newSettings) {
@@ -324,7 +335,7 @@ public class BoykaAIService {
                     String toolResult = executeToolCall(toolCall);
                     finalResponse.append("结果: ").append(toolResult).append("\n");
 
-                    conversationHistory.add(new Message("tool", "Tool: " + block.name +
+                    conversationHistory.add(new Message("user", "Tool: " + block.name +
                             "\nInput: " + gson.toJson(block.input) +
                             "\nResult: " + toolResult));
 
@@ -380,6 +391,8 @@ public class BoykaAIService {
 
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                BoykaAILogger.error("sendToolResultToClaude Unexpected code " + response.code() + ". Response body: " + responseBody, new IOException("Unexpected code " + response.code()));
                 throw new IOException("sendToolResultToClaude Unexpected code " + response);
             }
 
@@ -561,7 +574,7 @@ public class BoykaAIService {
                     return analysisClaudeResponse.content.get(0).text;
                 }
             }
-            BoykaAILogger.error("Analysis API request failed", new IOException("Unexpected code " + analysisResponse.code()));
+            BoykaAILogger.error("Analysis API request failed", new IOException("Unexpected code " + analysisResponse.code()+ ". Response body: " + analysisResponse.body().string()));
         }
         return "Failed to analyze the conversation and tool results.";
     }

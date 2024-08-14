@@ -4,10 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 public class Tool {
-    private String name;
-    private String description;
-    private JsonObject inputSchema;
-    private String[] required;
+    private final String name;
+    private final String description;
+    private final JsonObject inputSchema;
+    private final String[] required;
 
     public Tool(String name, String description, JsonObject inputSchema, String[] required) {
         this.name = name;
@@ -43,13 +43,7 @@ public class Tool {
         JsonObject parametersObject = new JsonObject();
         parametersObject.addProperty("type", "object");
         parametersObject.add("properties", inputSchema);
-        if (required != null && required.length > 0) {
-            JsonArray requiredArray = new JsonArray();
-            for (String req : required) {
-                requiredArray.add(req);
-            }
-            parametersObject.add("required", requiredArray);
-        }
+        addRequiredArray(parametersObject);
         functionObject.add("parameters", parametersObject);
 
         toolObject.add("function", functionObject);
@@ -64,15 +58,19 @@ public class Tool {
         JsonObject schemaObject = new JsonObject();
         schemaObject.addProperty("type", "object");
         schemaObject.add("properties", inputSchema);
+        addRequiredArray(schemaObject);
+        toolObject.add("input_schema", schemaObject);
+
+        return toolObject;
+    }
+
+    private void addRequiredArray(JsonObject object) {
         if (required != null && required.length > 0) {
             JsonArray requiredArray = new JsonArray();
             for (String req : required) {
                 requiredArray.add(req);
             }
-            schemaObject.add("required", requiredArray);
+            object.add("required", requiredArray);
         }
-        toolObject.add("input_schema", schemaObject);
-
-        return toolObject;
     }
 }
