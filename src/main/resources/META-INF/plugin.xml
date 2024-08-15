@@ -32,6 +32,10 @@
     </extensions>
 
     <actions>
+        <!-- 其他 actions -->
+        <action id="Boyka.AddToContext" class="com.dobest1.boyka.AddToContextAction" text="添加到上下文" description="将文件添加到 Boyka AI 上下文">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
         <!-- Add your actions here -->
     </actions>
 </idea-plugin>

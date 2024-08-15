@@ -26,6 +26,8 @@ public class BoykaAISettings implements PersistentStateComponent<BoykaAISettings
         public List<String> availableModels = new ArrayList<>();
         public boolean enableClaude = false;
         public boolean enableOpenai = false;
+        public int autoRepeatCount = 10;
+
     }
 
     private State myState = new State();

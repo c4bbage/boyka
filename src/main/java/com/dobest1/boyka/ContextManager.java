@@ -1,5 +1,6 @@
 package com.dobest1.boyka;
 
+import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -16,16 +17,43 @@ public class ContextManager {
     private final Project project;
     private final List<String> contextFiles;
     private final Map<String, String> fileContents;
+    public static ContextManager getInstance(Project project) {
+        return ServiceManager.getService(project, ContextManager.class);
+    }
 
     public ContextManager(Project project) {
         this.project = project;
         this.contextFiles = new ArrayList<>();
         this.fileContents = new HashMap<>();
     }
+    public boolean isFileInContext(String filePath) {
+        return contextFiles.contains(filePath);
+    }
+
+    private List<ContextChangeListener> listeners = new ArrayList<>();
+
+    public interface ContextChangeListener {
+        void onContextChanged();
+    }
+
+    public void addContextChangeListener(ContextChangeListener listener) {
+        listeners.add(listener);
+    }
+
+    public void removeContextChangeListener(ContextChangeListener listener) {
+        listeners.remove(listener);
+    }
+
+    public void notifyContextChanged() {
+        for (ContextChangeListener listener : listeners) {
+            listener.onContextChanged();
+        }
+    }
 
     public void addFileToContext(String filePath) {
         if (!contextFiles.contains(filePath)) {
             contextFiles.add(filePath);
+            notifyContextChanged();
         }
     }
 

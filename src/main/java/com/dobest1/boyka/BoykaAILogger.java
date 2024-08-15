@@ -10,12 +10,10 @@ public class BoykaAILogger {
 
     public static void info(String message) {
         LOG.info(message);
-        showNotification("Info", message);
     }
 
     public static void warn(String message) {
         LOG.warn(message);
-        showNotification("Warning", message);
     }
 
     public static void error(String message, Throwable e) {

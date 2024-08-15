@@ -17,7 +17,7 @@ public class BoykaAIService {
     private static final String BASE_SYSTEM_PROMPT = """
     You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
-    1. Creating and managing project structures
+    1. managing project structures
     2. Writing, debugging, and improving code across multiple languages
     3. Providing architectural insights and applying design patterns
     4. Staying current with the latest technologies and best practices
@@ -46,7 +46,7 @@ public class BoykaAIService {
     - If a process fails to stop, consider potential reasons and suggest alternative approaches.
 
     Project Creation and Management:
-    1. Start by creating a root folder for new projects.
+    1. don't Start by creating a root folder for new projects.
     2. Create necessary subdirectories and files within the root folder.
     3. Organize the project structure logically, following best practices for the specific project type.
 
@@ -85,187 +85,79 @@ public class BoykaAIService {
     Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
     """;
 
-    private final OkHttpClient client;
     private final Gson gson;
     private final BoykaAIFileTools fileTools;
     private final ContextManager contextManager;
     private BoykaAISettings.State settings;
-    private final ClaudeClient claudeClient;
     private final List<Tool> availableTools;
+    private final ToolExecutor toolExecutor;
+
+    // 添加 AI 客户端声明
+    private ClaudeClient claudeClient;
+    private OpenAIClient openAIClient;
+
     public BoykaAIService(BoykaAIFileTools fileTools, ContextManager contextManager) {
         this.fileTools = fileTools;
         this.contextManager = contextManager;
-        this.client = new OkHttpClient.Builder()
-                .connectTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
-                .readTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
-                .writeTimeout(TIMEOUT_MINUTES, TimeUnit.MINUTES)
-                .build();
-        this.gson = new Gson();
         this.settings = BoykaAISettings.getInstance().getState();
-
+        this.gson = new Gson();
         this.availableTools = BoykaAIToolWindowContent.createAvailableTools();
+        this.toolExecutor = new ToolExecutor(fileTools);
+        initializeAIClients();
+    }
 
+    private void initializeAIClients() {
         ClaudeConfig claudeConfig = new ClaudeConfig.Builder()
                 .apiKey(settings.claudeKey)
                 .apiUrl(settings.claudeAddress)
                 .model(settings.claudeModel)
                 .maxTokens(settings.maxTokens)
                 .build();
-        this.claudeClient = new ClaudeClient(claudeConfig);
+        this.claudeClient = new ClaudeClient(claudeConfig,BASE_SYSTEM_PROMPT,toolExecutor);
+
+        OpenAIConfig openAIConfig = new OpenAIConfig.Builder()
+                .apiKey(settings.openAIKey)
+                .apiUrl(settings.openAIBaseAddress)
+                .model(settings.selectedModel)
+                .maxTokens(settings.maxTokens)
+                .build();
+        this.openAIClient = new OpenAIClient(openAIConfig,BASE_SYSTEM_PROMPT, toolExecutor);
     }
 
     public void updateSettings(BoykaAISettings.State newSettings) {
         this.settings = newSettings;
+        initializeAIClients();
     }
 
-    public boolean validateSettings() {
-        if (settings.openAIBaseAddress.isEmpty() || settings.openAIKey.isEmpty()) {
-            return false;
-        }
-
-        String testUrl = settings.openAIBaseAddress + "v1/models";
-        Request request = new Request.Builder()
-                .url(testUrl)
-                .addHeader("Authorization", "Bearer " + settings.openAIKey)
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            return response.isSuccessful();
-        } catch (IOException e) {
-            BoykaAILogger.error("Error validating settings", e);
-            return false;
-        }
-    }
-    private RequestBody createOpenAIRequestBody(String context, List<Tool> availableTools, String model) {
-        JsonObject jsonBody = new JsonObject();
-        jsonBody.addProperty("model", model);
-
-        JsonArray messages = new JsonArray();
-        JsonObject systemMessage = new JsonObject();
-        systemMessage.addProperty("role", "system");
-        systemMessage.addProperty("content", BASE_SYSTEM_PROMPT + "\n\nContext: " + context);
-        messages.add(systemMessage);
-
-        // 添加对话历史
-        for (Message message : conversationHistory) {
-            JsonObject messageObject = new JsonObject();
-            messageObject.addProperty("role", message.role);
-            messageObject.addProperty("content", message.content);
-            messages.add(messageObject);
-        }
-
-        jsonBody.add("messages", messages);
-
-        JsonArray toolsArray = new JsonArray();
-        for (Tool tool : availableTools) {
-            toolsArray.add(tool.toOpenAIFormat());
-        }
-        jsonBody.add("tools", toolsArray);
-
-
-        return RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
-    }
-
-    private RequestBody createClaudeRequestBody(String context, List<Tool> availableTools, String model) {
-        JsonObject jsonBody = new JsonObject();
-        jsonBody.addProperty("model", settings.claudeModel);
-        jsonBody.addProperty("max_tokens", settings.maxTokens);
-        jsonBody.addProperty("system",BASE_SYSTEM_PROMPT+ "\n\nContext: " + context);
-        JsonArray messages = new JsonArray();
-
-        // 添加对话历史
-        for (Message message : conversationHistory) {
-            JsonObject messageObject = new JsonObject();
-            messageObject.addProperty("role", message.role);
-            messageObject.addProperty("content", message.content);
-            messages.add(messageObject);
-        }
-
-        jsonBody.add("messages", messages);
-
-        JsonArray toolsArray = new JsonArray();
-        for (Tool tool : availableTools) {
-            toolsArray.add(tool.toClaudeFormat());
-        }
-        jsonBody.add("tools", toolsArray);
-        BoykaAILogger.info("API Request Body: " + jsonBody.toString());
-        return RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
-    }
-    public String getAIResponse(String userMessage, List<Tool> availableTools, String context, String model) {
-        // 添加用户消息到对话历史
-        conversationHistory.add(new Message("user", userMessage));
-
-        String url;
-        String apiKey;
-        RequestBody body;
-        Request.Builder requestBuilder = new Request.Builder();
-
-        if (settings.enableOpenai) {
-            url = settings.openAIBaseAddress + "v1/chat/completions";
-            apiKey = settings.openAIKey;
-            body = createOpenAIRequestBody(context, availableTools, model);
-            requestBuilder.addHeader("Authorization", "Bearer " + apiKey);
-        } else {
-            url = settings.claudeAddress + "v1/messages";
-            apiKey = settings.claudeKey;
-            body = createClaudeRequestBody(context, availableTools, model);
-            requestBuilder.addHeader("x-api-key", apiKey);
-            requestBuilder.addHeader("anthropic-version", "2023-06-01");
-        }
-
-        requestBuilder.url(url)
-                .post(body)
-                .addHeader("content-type", "application/json");
-        BoykaAILogger.info("API Request: " + url);
-        BoykaAILogger.info("API Request Body: " + body.toString());
-
-        Request request = requestBuilder.build();
+    public String getAIResponse(String userMessage, String context, String model) {
 
         StringBuilder finalResponse = new StringBuilder();
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                String errorBody = response.body() != null ? response.body().string() : "No error body";
-                BoykaAILogger.error("API request failed", new IOException("Unexpected code " + response.code() + ". Error body: " + errorBody));
-                return "Error: API request failed with code " + response.code() + ". Please check your settings and try again.";
-            }
-            String responseBody = response.body() != null ? response.body().string() : "";
-            BoykaAILogger.info("API Response: " + responseBody);
-
-            if (responseBody.isEmpty()) {
-                BoykaAILogger.error("Empty response body", new IOException("Empty response body"));
-                return "Error: Received empty response from the API. Please try again.";
-            }
-
-            if (settings.enableOpenai) {
-                AIResponse aiResponse = gson.fromJson(responseBody, AIResponse.class);
-                processOpenAIResponse(aiResponse, finalResponse, availableTools, url, apiKey, model);
+        try {
+            String response;
+            if (settings.enableClaude) {
+                response = claudeClient.sendMessage(userMessage, context,availableTools);
+            } else if (settings.enableOpenai) {
+                response = openAIClient.sendMessage(userMessage, availableTools);
             } else {
-                AIClaudeResponse claudeResponse = gson.fromJson(responseBody, AIClaudeResponse.class);
-                processClaudeResponse(claudeResponse, finalResponse, availableTools, url, apiKey, model);
+                return "Error: No AI service enabled. Please enable either Claude or OpenAI in settings.";
             }
+            finalResponse.append(response);
 
-            // 进行额外的 AI 调用来分析工具调用结果
-            String analysisPrompt = "Analyze the following conversation and tool results, then provide a comprehensive response:\n\n" + getConversationHistoryString();
-
-            if (settings.enableOpenai) {
-                String analysisResult = getOpenAIAnalysis(analysisPrompt, availableTools, url, apiKey, model);
-                finalResponse.append("\n\nAnalysis of conversation and tool results:\n").append(analysisResult);
-                conversationHistory.add(new Message("analysis", analysisResult));
-            } else {
-                String analysisResult = getClaudeAnalysis(analysisPrompt, availableTools, url, apiKey, model);
-                finalResponse.append("\n\nAnalysis of conversation and tool results:\n").append(analysisResult);
-                conversationHistory.add(new Message("user", analysisResult));
-            }
+//            String analysisPrompt = "Analyze the following conversation and tool results, then provide a comprehensive response:\n\n" + getConversationHistoryString();
+//            String analysisResult = settings.enableClaude ?
+//                    getClaudeAnalysis(analysisPrompt) : getOpenAIAnalysis(analysisPrompt);
+//            finalResponse.append("\n\nAnalysis of conversation and tool results:\n").append(analysisResult);
 
             return finalResponse.toString();
         } catch (IOException e) {
             BoykaAILogger.error("Error during API call", e);
             return "Error: " + e.getMessage() + ". Please check your network connection and try again.";
-        } catch (JsonSyntaxException e) {
-            BoykaAILogger.error("Error parsing JSON response", e);
-            return "Error: Failed to parse the API response. Please try again or contact support.";
+        } catch (Exception e) {
+            BoykaAILogger.error("Unexpected error", e);
+            return "Error: An unexpected error occurred. Please try again or contact support.";
         }
     }
+
     private void processOpenAIResponse(AIResponse aiResponse, StringBuilder finalResponse, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
         if (aiResponse.choices == null || aiResponse.choices.length == 0) {
             BoykaAILogger.warn("Received empty choices from OpenAI API");
@@ -288,9 +180,9 @@ public class BoykaAIService {
                             updateContextIfNeeded(toolCall, toolResult);
 
                             // 发送工具调用结果回 OpenAI
-                            String followUpResponse = sendToolResultToOpenAI(toolCall, toolResult, availableTools, url, apiKey, model);
-                            finalResponse.append("OpenAI 跟进响应: ").append(followUpResponse).append("\n");
-                            conversationHistory.add(new Message("user", followUpResponse));
+                            String openAIResponseToTool = sendToolResult(null, toolCall.function.name, toolResult);
+                            finalResponse.append("OpenAI 跟进响应: ").append(openAIResponseToTool).append("\n");
+                            conversationHistory.add(new Message("user", openAIResponseToTool));
                         } else {
                             BoykaAILogger.warn("Received invalid tool call from OpenAI API");
                         }
@@ -342,9 +234,9 @@ public class BoykaAIService {
                     updateContextIfNeeded(toolCall, toolResult);
 
                     // 发送工具调用结果回 Claude
-                    String claudeResponseText = sendToolResultToClaude(block.id, toolResult, url, apiKey, model);
-                    finalResponse.append("Claude 响应: ").append(claudeResponseText).append("\n");
-                    conversationHistory.add(new Message("assistant", claudeResponseText));
+                    String claudeResponseToTool = sendToolResult(block.id, null, toolResult);
+                    finalResponse.append("Claude 响应: ").append(claudeResponseToTool).append("\n");
+                    conversationHistory.add(new Message("assistant", claudeResponseToTool));
                 } else {
                     BoykaAILogger.warn("Received unknown content type from Claude API: " + block.type);
                 }
@@ -359,97 +251,106 @@ public class BoykaAIService {
             BoykaAILogger.warn("Received null role from Claude API");
         }
     }
-    private String sendToolResultToClaude(String toolUseId, String toolResult, String url, String apiKey, String model) throws IOException {
-        JsonObject jsonBody = new JsonObject();
-        jsonBody.addProperty("model", model);
-
-        JsonArray messages = new JsonArray();
-        JsonObject userMessage = new JsonObject();
-        userMessage.addProperty("role", "user");
-
-        JsonArray content = new JsonArray();
-        JsonObject toolResultObj = new JsonObject();
-        toolResultObj.addProperty("type", "tool_result");
-        toolResultObj.addProperty("tool_use_id", toolUseId);
-        toolResultObj.addProperty("content", toolResult);
-        content.add(toolResultObj);
-
-        userMessage.add("content", content);
-        messages.add(userMessage);
-
-        jsonBody.add("messages", messages);
-
-        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
-
-        Request request = new Request.Builder()
-                .url(url)
-                .post(body)
-                .addHeader("x-api-key", apiKey)
-                .addHeader("anthropic-version", "2023-06-01")
-                .addHeader("content-type", "application/json")
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                String responseBody = response.body() != null ? response.body().string() : "";
-                BoykaAILogger.error("sendToolResultToClaude Unexpected code " + response.code() + ". Response body: " + responseBody, new IOException("Unexpected code " + response.code()));
-                throw new IOException("sendToolResultToClaude Unexpected code " + response);
-            }
-
-            String responseBody = response.body() != null ? response.body().string() : "";
-            AIClaudeResponse claudeResponse = gson.fromJson(responseBody, AIClaudeResponse.class);
-
-            // 返回 Claude 的响应文本
-            return claudeResponse.content.get(0).text;
+    public String sendToolResult(String toolId, String functionName, String toolResult) throws IOException {
+        if (settings.enableClaude) {
+            return claudeClient.sendToolResult(toolId, toolResult);
+        } else if (settings.enableOpenai) {
+            return openAIClient.sendToolResult(functionName, toolResult, availableTools);
+        } else {
+            throw new IllegalStateException("No AI service enabled");
         }
     }
-    private String sendToolResultToOpenAI(ToolCall toolCall, String toolResult, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
-        JsonObject jsonBody = new JsonObject();
-        jsonBody.addProperty("model", model);
-
-        JsonArray messages = new JsonArray();
-        for (Message message : conversationHistory) {
-            JsonObject messageObject = new JsonObject();
-            messageObject.addProperty("role", message.role);
-            messageObject.addProperty("content", message.content);
-            messages.add(messageObject);
-        }
-
-        JsonObject toolResultMessage = new JsonObject();
-        toolResultMessage.addProperty("role", "function");
-        toolResultMessage.addProperty("name", toolCall.function.name);
-        toolResultMessage.addProperty("content", toolResult);
-        messages.add(toolResultMessage);
-
-        jsonBody.add("messages", messages);
-
-        JsonArray toolsArray = new JsonArray();
-        for (Tool tool : availableTools) {
-            toolsArray.add(tool.toOpenAIFormat());
-        }
-        jsonBody.add("tools", toolsArray);
-
-        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
-
-        Request request = new Request.Builder()
-                .url(url)
-                .post(body)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .addHeader("content-type", "application/json")
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new IOException("Unexpected code " + response);
-            }
-
-            String responseBody = response.body() != null ? response.body().string() : "";
-            AIResponse openAIResponse = gson.fromJson(responseBody, AIResponse.class);
-
-            // 返回 OpenAI 的响应文本
-            return openAIResponse.choices[0].message.content;
-        }
-    }
+//    private String sendToolResultToClaude(String toolUseId, String toolResult, String url, String apiKey, String model) throws IOException {
+//        JsonObject jsonBody = new JsonObject();
+//        jsonBody.addProperty("model", model);
+//
+//        JsonArray messages = new JsonArray();
+//        JsonObject userMessage = new JsonObject();
+//        userMessage.addProperty("role", "user");
+//
+//        JsonArray content = new JsonArray();
+//        JsonObject toolResultObj = new JsonObject();
+//        toolResultObj.addProperty("type", "tool_result");
+//        toolResultObj.addProperty("tool_use_id", toolUseId);
+//        toolResultObj.addProperty("content", toolResult);
+//        content.add(toolResultObj);
+//
+//        userMessage.add("content", content);
+//        messages.add(userMessage);
+//
+//        jsonBody.add("messages", messages);
+//
+//        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
+//
+//        Request request = new Request.Builder()
+//                .url(url)
+//                .post(body)
+//                .addHeader("x-api-key", apiKey)
+//                .addHeader("anthropic-version", "2023-06-01")
+//                .addHeader("content-type", "application/json")
+//                .build();
+//
+//        try (Response response = client.newCall(request).execute()) {
+//            if (!response.isSuccessful()) {
+//                String responseBody = response.body() != null ? response.body().string() : "";
+//                BoykaAILogger.error("sendToolResultToClaude Unexpected code " + response.code() + ". Response body: " + responseBody, new IOException("Unexpected code " + response.code()));
+//                throw new IOException("sendToolResultToClaude Unexpected code " + response);
+//            }
+//
+//            String responseBody = response.body() != null ? response.body().string() : "";
+//            AIClaudeResponse claudeResponse = gson.fromJson(responseBody, AIClaudeResponse.class);
+//
+//            // 返回 Claude 的响应文本
+//            return claudeResponse.content.get(0).text;
+//        }
+//    }
+//    private String sendToolResultToOpenAI(ToolCall toolCall, String toolResult, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
+//        JsonObject jsonBody = new JsonObject();
+//        jsonBody.addProperty("model", model);
+//
+//        JsonArray messages = new JsonArray();
+//        for (Message message : conversationHistory) {
+//            JsonObject messageObject = new JsonObject();
+//            messageObject.addProperty("role", message.role);
+//            messageObject.addProperty("content", message.content);
+//            messages.add(messageObject);
+//        }
+//
+//        JsonObject toolResultMessage = new JsonObject();
+//        toolResultMessage.addProperty("role", "function");
+//        toolResultMessage.addProperty("name", toolCall.function.name);
+//        toolResultMessage.addProperty("content", toolResult);
+//        messages.add(toolResultMessage);
+//
+//        jsonBody.add("messages", messages);
+//
+//        JsonArray toolsArray = new JsonArray();
+//        for (Tool tool : availableTools) {
+//            toolsArray.add(tool.toOpenAIFormat());
+//        }
+//        jsonBody.add("tools", toolsArray);
+//
+//        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
+//
+//        Request request = new Request.Builder()
+//                .url(url)
+//                .post(body)
+//                .addHeader("Authorization", "Bearer " + apiKey)
+//                .addHeader("content-type", "application/json")
+//                .build();
+//
+//        try (Response response = client.newCall(request).execute()) {
+//            if (!response.isSuccessful()) {
+//                throw new IOException("Unexpected code " + response);
+//            }
+//
+//            String responseBody = response.body() != null ? response.body().string() : "";
+//            AIResponse openAIResponse = gson.fromJson(responseBody, AIResponse.class);
+//
+//            // 返回 OpenAI 的响应文本
+//            return openAIResponse.choices[0].message.content;
+//        }
+//    }
     private void updateContextIfNeeded(ToolCall toolCall, String toolResult) {
         if (toolCall.function.name.equals("read_file") || toolCall.function.name.equals("create_file")) {
             JsonObject args = gson.fromJson(toolCall.function.arguments, JsonObject.class);
@@ -465,18 +366,18 @@ public class BoykaAIService {
         return history.toString();
     }
 
+    private String getClaudeAnalysis(String analysisPrompt) throws IOException {
+        BoykaAILogger.info("Sending analysis prompt to Claude: " + analysisPrompt);
+        return claudeClient.sendMessage(analysisPrompt,"", availableTools);
+    }
+
+    private String getOpenAIAnalysis(String analysisPrompt) throws IOException {
+        return openAIClient.sendMessage(analysisPrompt, availableTools);
+    }
+
+
     public void clearConversationHistory() {
         conversationHistory.clear();
-    }
-    private String createPrompt(String userMessage, String context, List<Tool> availableTools) {
-        StringBuilder prompt = new StringBuilder(BASE_SYSTEM_PROMPT);
-        prompt.append("\n\nCurrent context:\n").append(context);
-        prompt.append("\n\nAvailable tools:\n");
-        for (Tool tool : availableTools) {
-            prompt.append("- ").append(tool.getName()).append(": ").append(tool.getDescription()).append("\n");
-        }
-        prompt.append("\nUser message: ").append(userMessage);
-        return prompt.toString();
     }
 
     private String executeToolCall(ToolCall toolCall) {
@@ -489,8 +390,8 @@ public class BoykaAIService {
                     return fileTools.editAndApply(
                             args.get("path").getAsString(),
                             args.get("instructions").getAsString(),
-                            args.get("project_context").getAsString()
-                    );
+                            args.get("project_context").getAsString(),false,3
+                    ).get();
                 case "execute_code":
                     return fileTools.executeCode(args.get("code").getAsString());
                 case "stop_process":
@@ -529,56 +430,6 @@ public class BoykaAIService {
 //            initialGoal = "Continue with the next step.";
 //        }
 //    }
-
-    private String getOpenAIAnalysis(String analysisPrompt, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
-        AIRequest analysisRequest = new AIRequest(analysisPrompt, availableTools, model);
-        RequestBody analysisBody = RequestBody.create(MediaType.parse("application/json"), gson.toJson(analysisRequest));
-
-        Request analysisApiRequest = new Request.Builder()
-                .url(url)
-                .post(analysisBody)
-                .addHeader("content-type", "application/json")
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .build();
-
-        try (Response analysisResponse = client.newCall(analysisApiRequest).execute()) {
-            if (analysisResponse.isSuccessful()) {
-                String analysisResponseBody = analysisResponse.body() != null ? analysisResponse.body().string() : "";
-                AIResponse analysisAiResponse = gson.fromJson(analysisResponseBody, AIResponse.class);
-                if (analysisAiResponse.choices != null && analysisAiResponse.choices.length > 0) {
-                    return analysisAiResponse.choices[0].message.content;
-                }
-            }
-            BoykaAILogger.error("Analysis API request failed", new IOException("Unexpected code " + analysisResponse.code()));
-        }
-        return "Failed to analyze the conversation and tool results.";
-    }
-
-    private String getClaudeAnalysis(String analysisPrompt, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
-        AIRequest analysisRequest = new AIRequest(analysisPrompt, availableTools, model);
-        RequestBody analysisBody = RequestBody.create(MediaType.parse("application/json"), gson.toJson(analysisRequest));
-
-        Request analysisApiRequest = new Request.Builder()
-                .url(url)
-                .post(analysisBody)
-                .addHeader("content-type", "application/json")
-                .addHeader("x-api-key", apiKey)
-                .addHeader("anthropic-version", "2023-06-01")
-                .build();
-
-        try (Response analysisResponse = client.newCall(analysisApiRequest).execute()) {
-            if (analysisResponse.isSuccessful()) {
-                String analysisResponseBody = analysisResponse.body() != null ? analysisResponse.body().string() : "";
-                AIClaudeResponse analysisClaudeResponse = gson.fromJson(analysisResponseBody, AIClaudeResponse.class);
-                if (analysisClaudeResponse.content != null && !analysisClaudeResponse.content.isEmpty()) {
-                    return analysisClaudeResponse.content.get(0).text;
-                }
-            }
-            BoykaAILogger.error("Analysis API request failed", new IOException("Unexpected code " + analysisResponse.code()+ ". Response body: " + analysisResponse.body().string()));
-        }
-        return "Failed to analyze the conversation and tool results.";
-    }
-
     // Inner classes for request/response handling
     private static class AIRequest {
         String model;

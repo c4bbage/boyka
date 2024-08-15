@@ -15,6 +15,7 @@ import java.awt.*;
 public class BoykaAIConfigurable implements Configurable {
     private JPanel mainPanel;
     private JBTabbedPane tabbedPane;
+    private JBTextField autoRepeatCountField;
 
     // OpenAI fields
     private JBTextField openAIAddressField;
@@ -129,7 +130,10 @@ public class BoykaAIConfigurable implements Configurable {
         maxTokensField = new JBTextField();
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         panel.add(maxTokensField, gbc);
-
+        panel.add(new JBLabel("自动重复次数:"), gbc);
+        autoRepeatCountField = new JBTextField();
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        panel.add(autoRepeatCountField, gbc);
         return panel;
     }
 
@@ -151,6 +155,7 @@ public class BoykaAIConfigurable implements Configurable {
         maxTokensField.setText(String.valueOf(state.maxTokens));
         enableClaude.setSelected(state.enableClaude);
         enableOpenai.setSelected(state.enableOpenai);
+        autoRepeatCountField.setText(String.valueOf(state.autoRepeatCount));
         openAIModelSelector.setSelectedItem(state.selectedModel);
     }
 
@@ -165,7 +170,8 @@ public class BoykaAIConfigurable implements Configurable {
                 || Integer.parseInt(maxTokensField.getText()) != state.maxTokens
                 || enableClaude.isSelected() != state.enableClaude
                 || enableOpenai.isSelected() != state.enableOpenai
-                || !openAIModelSelector.getSelectedItem().equals(state.selectedModel);
+                || !openAIModelSelector.getSelectedItem().equals(state.selectedModel)
+                ||  !autoRepeatCountField.getText().equals(String.valueOf(state.autoRepeatCount));
     }
 
     @Override
@@ -180,6 +186,7 @@ public class BoykaAIConfigurable implements Configurable {
         state.enableClaude = enableClaude.isSelected();
         state.enableOpenai = enableOpenai.isSelected();
         state.selectedModel = (String) openAIModelSelector.getSelectedItem();
+        state.autoRepeatCount = Integer.parseInt(autoRepeatCountField.getText());
         BoykaAISettings.getInstance().loadState(state);
     }
 
