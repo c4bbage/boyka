@@ -14,45 +14,113 @@ public class BoykaAIService {
     private static final int TIMEOUT_MINUTES = 10;
     private List<Message> conversationHistory = new ArrayList<>();
 
+//    private static final String BASE_SYSTEM_PROMPT = """
+//    You are  specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
+//
+//    1. managing project structures
+//    2. Writing, debugging, and improving code across multiple languages
+//    3. Providing architectural insights and applying design patterns
+//    4. Staying current with the latest technologies and best practices
+//    5. Analyzing and manipulating files within the project directory
+//    6. Performing web searches for up-to-date information
+//    7. Executing code and analyzing its output within an isolated 'code_execution_env' virtual environment
+//    8. Managing and stopping running processes started within the 'code_execution_env'
+//
+//    Available tools and their optimal use cases:
+//    [List of tools with descriptions]
+//
+//    Tool Usage Guidelines:
+//    - Always use the most appropriate tool for the task at hand.
+//    - Provide detailed and clear instructions when using tools, especially for edit_and_apply.
+//    - After making changes, always review the output to ensure accuracy and alignment with intentions.
+//    - Use execute_code to run and test code within the 'code_execution_env' virtual environment, then analyze the results.
+//    - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
+//    - Proactively use tavily_search when you need up-to-date information or additional context.
+//    - When working with multiple files, consider using read_multiple_files for efficiency.
+//
+//    Error Handling and Recovery:
+//    - If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
+//    - For file-related errors, double-check file paths and permissions before retrying.
+//    - If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
+//    - If code execution fails, analyze the error output and suggest potential fixes, considering the isolated nature of the environment.
+//    - If a process fails to stop, consider potential reasons and suggest alternative approaches.
+//
+//    Project Creation and Management:
+//    1. don't Start by creating a root folder for new projects.
+//    2. Create necessary subdirectories and files within the root folder.
+//    3. Organize the project structure logically, following best practices for the specific project type.
+//
+//    Always strive for accuracy, clarity, and efficiency in your responses and actions. Your instructions must be precise and comprehensive. If uncertain, use the tavily_search tool or admit your limitations. When executing code, always remember that it runs in the isolated 'code_execution_env' virtual environment. Be aware of any long-running processes you start and manage them appropriately, including stopping them when they are no longer needed.
+//    """;
     private static final String BASE_SYSTEM_PROMPT = """
-    You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
+你是一位精通Golang、Python和C#的全栈开发专家，同时具备Windows和macOS平台的开发经验。  你在软件工程领域有丰富的经验，深谙高质量程序设计的原则和最佳实践。，可以访问各种工具并能够指导和引导编码代理和代码执行代理：
+你的开发要求：
+  1. 模块化设计：将系统划分为清晰的、低耦合的模块。
+    2. 代码复用：最大化代码的可重用性，减少重复代码。
+    3. 扩展性：设计灵活的架构，便于未来功能扩展。
+    4. 稳定性：确保系统在各种情况下都能稳定运行。
+    5. 容错性：实现健壮的错误处理机制。
+    6. 处理效率：优化系统性能，确保高效运行。
+    7. 功能完善：在保持代码简洁的同时，实现所有必要功能。
+你的能力包括：
+        1. 创建和管理项目结构
+        2. 在多种语言中编写、调试和改进代码
+        3. 提供架构见解并应用设计模式
+        4. 跟上最新的技术和最佳实践
+        5. 分析和操作项目目录中的文件
+        6. 执行网络搜索以获取最新信息
+        7. 在隔离的'code_execution_env'虚拟环境中执行代码并分析其输出
+        8. 管理和停止在'code_execution_env'中启动的运行进程
+        
+        可用工具及其最佳使用场景：
+        
+        1. create_folder：在项目结构中创建新目录。
+        2. create_file：生成具有指定内容的新文件。努力使文件尽可能完整和有用。
+        3. edit_and_apply：通过指导单独的AI编码代理来检查和修改现有文件。你负责为这个代理提供清晰、详细的指示。使用此工具时：
+           - 提供关于项目的全面背景，包括最近的更改、新变量或函数，以及文件之间的相互关联。
+           - 清楚地说明需要的具体更改或改进，解释每个修改背后的原因。
+           - 包括所有需要更改的代码片段，以及所需的修改。
+           - 指定要遵循的编码标准、命名约定或架构模式。
+           - 预测可能由更改引起的潜在问题或冲突，并提供如何处理它们的指导。
+        4. execute_code：专门在'code_execution_env'虚拟环境中运行Python代码并分析其输出。当你需要测试代码功能或诊断问题时使用此工具。记住，所有代码执行都发生在这个隔离环境中。此工具现在会为长时间运行的进程返回进程ID。
+        5. stop_process：通过ID停止运行的进程。当你需要终止由execute_code工具启动的长时间运行的进程时使用此工具。
+        6. read_file：读取现有文件的内容。
+        7. read_multiple_files：一次读取多个现有文件的内容。当你需要同时检查或处理多个文件时使用此工具。
+        8. list_files：列出指定文件夹中的所有文件和目录。
+        9. tavily_search：使用Tavily API执行网络搜索以获取最新信息。
+        
+        工具使用指南：
+        - 始终使用最适合任务的工具。
+        - 使用工具时提供详细和清晰的指示，特别是对于edit_and_apply。
+        - 进行更改后，始终检查输出以确保准确性和与意图的一致性。
+        - 使用execute_code在'code_execution_env'虚拟环境中运行和测试代码，然后分析结果。
+        - 对于长时间运行的进程，使用execute_code返回的进程ID以便稍后需要时停止它们。
+        - 当你需要最新信息或额外背景时，主动使用tavily_search。
+        - 处理多个文件时，考虑使用read_multiple_files以提高效率。
+        
+        错误处理和恢复：
+        - 如果工具操作失败，仔细分析错误消息并尝试解决问题。
+        - 对于文件相关的错误，在重试之前仔细检查文件路径和权限。
+        - 如果搜索失败，尝试重新表述查询或将其分解为更小、更具体的搜索。
+        - 如果代码执行失败，分析错误输出并建议潜在的修复，考虑环境的隔离性质。
+        - 如果进程无法停止，考虑潜在原因并建议替代方法。
+        
+        项目创建和管理：
+        1. 首先为新项目创建一个根文件夹。
+        2. 在根文件夹内创建必要的子目录和文件。
+        3. 按照特定项目类型的最佳实践，以逻辑方式组织项目结构。
+        
+        始终努力在你的响应和行动中保持准确性、清晰性和效率。你的指示必须精确和全面。如果不确定，使用tavily_search工具或承认你的局限性。执行代码时，始终记住它在隔离的'code_execution_env'虚拟环境中运行。注意你启动的任何长时间运行的进程，并适当管理它们，包括在不再需要时停止它们。
+        
+        使用工具时：
+        1. 在使用工具之前仔细考虑是否有必要。
+        2. 确保提供了所有必需的参数并且有效。
+        3. 优雅地处理成功结果和错误。
+        4. 向用户提供清晰的工具使用和结果说明。
+        
+        记住，你是一个AI助手，你的主要目标是帮助用户有效和高效地完成他们的任务，同时维护他们的开发环境的完整性和安全性。
 
-    1. managing project structures
-    2. Writing, debugging, and improving code across multiple languages
-    3. Providing architectural insights and applying design patterns
-    4. Staying current with the latest technologies and best practices
-    5. Analyzing and manipulating files within the project directory
-    6. Performing web searches for up-to-date information
-    7. Executing code and analyzing its output within an isolated 'code_execution_env' virtual environment
-    8. Managing and stopping running processes started within the 'code_execution_env'
-
-    Available tools and their optimal use cases:
-    [List of tools with descriptions]
-
-    Tool Usage Guidelines:
-    - Always use the most appropriate tool for the task at hand.
-    - Provide detailed and clear instructions when using tools, especially for edit_and_apply.
-    - After making changes, always review the output to ensure accuracy and alignment with intentions.
-    - Use execute_code to run and test code within the 'code_execution_env' virtual environment, then analyze the results.
-    - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
-    - Proactively use tavily_search when you need up-to-date information or additional context.
-    - When working with multiple files, consider using read_multiple_files for efficiency.
-
-    Error Handling and Recovery:
-    - If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
-    - For file-related errors, double-check file paths and permissions before retrying.
-    - If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
-    - If code execution fails, analyze the error output and suggest potential fixes, considering the isolated nature of the environment.
-    - If a process fails to stop, consider potential reasons and suggest alternative approaches.
-
-    Project Creation and Management:
-    1. don't Start by creating a root folder for new projects.
-    2. Create necessary subdirectories and files within the root folder.
-    3. Organize the project structure logically, following best practices for the specific project type.
-
-    Always strive for accuracy, clarity, and efficiency in your responses and actions. Your instructions must be precise and comprehensive. If uncertain, use the tavily_search tool or admit your limitations. When executing code, always remember that it runs in the isolated 'code_execution_env' virtual environment. Be aware of any long-running processes you start and manage them appropriately, including stopping them when they are no longer needed.
     """;
-
     private static final String AUTOMODE_SYSTEM_PROMPT = """
     You are currently in automode. Follow these guidelines:
 
@@ -129,7 +197,7 @@ public class BoykaAIService {
         initializeAIClients();
     }
 
-    public String getAIResponse(String userMessage, String context, String model) {
+    public String getAIResponse(String userMessage, String context) {
 
         StringBuilder finalResponse = new StringBuilder();
         try {
@@ -137,7 +205,7 @@ public class BoykaAIService {
             if (settings.enableClaude) {
                 response = claudeClient.sendMessage(userMessage, context,availableTools);
             } else if (settings.enableOpenai) {
-                response = openAIClient.sendMessage(userMessage, availableTools);
+                response = openAIClient.sendMessage(userMessage, context,availableTools);
             } else {
                 return "Error: No AI service enabled. Please enable either Claude or OpenAI in settings.";
             }
@@ -158,199 +226,6 @@ public class BoykaAIService {
         }
     }
 
-    private void processOpenAIResponse(AIResponse aiResponse, StringBuilder finalResponse, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
-        if (aiResponse.choices == null || aiResponse.choices.length == 0) {
-            BoykaAILogger.warn("Received empty choices from OpenAI API");
-            return;
-        }
-
-        for (Choice choice : aiResponse.choices) {
-            if (choice.message != null) {
-                if (choice.message.content != null) {
-                    finalResponse.append(choice.message.content).append("\n");
-                    conversationHistory.add(new Message("assistant", choice.message.content));
-                }
-                if (choice.message.tool_calls != null) {
-                    for (ToolCall toolCall : choice.message.tool_calls) {
-                        if (toolCall.function != null && toolCall.function.name != null) {
-                            String toolResult = executeToolCall(toolCall);
-                            finalResponse.append("工具调用: ").append(toolCall.function.name)
-                                    .append("\n结果: ").append(toolResult).append("\n");
-                            conversationHistory.add(new Message("tool", "Tool: " + toolCall.function.name + "\nResult: " + toolResult));
-                            updateContextIfNeeded(toolCall, toolResult);
-
-                            // 发送工具调用结果回 OpenAI
-                            String openAIResponseToTool = sendToolResult(null, toolCall.function.name, toolResult);
-                            finalResponse.append("OpenAI 跟进响应: ").append(openAIResponseToTool).append("\n");
-                            conversationHistory.add(new Message("user", openAIResponseToTool));
-                        } else {
-                            BoykaAILogger.warn("Received invalid tool call from OpenAI API");
-                        }
-                    }
-                }
-            } else {
-                BoykaAILogger.warn("Received choice with null message from OpenAI API");
-            }
-        }
-    }
-
-    private void processClaudeResponse(AIClaudeResponse claudeResponse, StringBuilder finalResponse, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
-        if (claudeResponse.content != null) {
-            for (ContentBlock block : claudeResponse.content) {
-                if (block == null) {
-                    BoykaAILogger.warn("Received null content block from Claude API");
-                    continue;
-                }
-
-                if ("text".equals(block.type)) {
-                    if (block.text != null) {
-                        finalResponse.append(block.text).append("\n");
-                        conversationHistory.add(new Message("assistant", block.text));
-                    } else {
-                        BoykaAILogger.warn("Received text block with null content from Claude API");
-                    }
-                } else if ("tool_use".equals(block.type)) {
-                    if (block.name == null || block.input == null) {
-                        BoykaAILogger.warn("Received invalid tool_use data from Claude API");
-                        continue;
-                    }
-
-                    finalResponse.append("工具调用: ").append(block.name)
-                            .append("\n输入: ").append(gson.toJson(block.input)).append("\n");
-
-                    ToolCall toolCall = new ToolCall();
-                    toolCall.id = block.id;
-                    toolCall.function = new Function();
-                    toolCall.function.name = block.name;
-                    toolCall.function.arguments = gson.toJson(block.input);
-
-                    String toolResult = executeToolCall(toolCall);
-                    finalResponse.append("结果: ").append(toolResult).append("\n");
-
-                    conversationHistory.add(new Message("user", "Tool: " + block.name +
-                            "\nInput: " + gson.toJson(block.input) +
-                            "\nResult: " + toolResult));
-
-                    updateContextIfNeeded(toolCall, toolResult);
-
-                    // 发送工具调用结果回 Claude
-                    String claudeResponseToTool = sendToolResult(block.id, null, toolResult);
-                    finalResponse.append("Claude 响应: ").append(claudeResponseToTool).append("\n");
-                    conversationHistory.add(new Message("assistant", claudeResponseToTool));
-                } else {
-                    BoykaAILogger.warn("Received unknown content type from Claude API: " + block.type);
-                }
-            }
-        } else {
-            BoykaAILogger.warn("Received null content from Claude API");
-        }
-
-        if (claudeResponse.role != null) {
-            conversationHistory.add(new Message(claudeResponse.role, finalResponse.toString()));
-        } else {
-            BoykaAILogger.warn("Received null role from Claude API");
-        }
-    }
-    public String sendToolResult(String toolId, String functionName, String toolResult) throws IOException {
-        if (settings.enableClaude) {
-            return claudeClient.sendToolResult(toolId, toolResult);
-        } else if (settings.enableOpenai) {
-            return openAIClient.sendToolResult(functionName, toolResult, availableTools);
-        } else {
-            throw new IllegalStateException("No AI service enabled");
-        }
-    }
-//    private String sendToolResultToClaude(String toolUseId, String toolResult, String url, String apiKey, String model) throws IOException {
-//        JsonObject jsonBody = new JsonObject();
-//        jsonBody.addProperty("model", model);
-//
-//        JsonArray messages = new JsonArray();
-//        JsonObject userMessage = new JsonObject();
-//        userMessage.addProperty("role", "user");
-//
-//        JsonArray content = new JsonArray();
-//        JsonObject toolResultObj = new JsonObject();
-//        toolResultObj.addProperty("type", "tool_result");
-//        toolResultObj.addProperty("tool_use_id", toolUseId);
-//        toolResultObj.addProperty("content", toolResult);
-//        content.add(toolResultObj);
-//
-//        userMessage.add("content", content);
-//        messages.add(userMessage);
-//
-//        jsonBody.add("messages", messages);
-//
-//        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
-//
-//        Request request = new Request.Builder()
-//                .url(url)
-//                .post(body)
-//                .addHeader("x-api-key", apiKey)
-//                .addHeader("anthropic-version", "2023-06-01")
-//                .addHeader("content-type", "application/json")
-//                .build();
-//
-//        try (Response response = client.newCall(request).execute()) {
-//            if (!response.isSuccessful()) {
-//                String responseBody = response.body() != null ? response.body().string() : "";
-//                BoykaAILogger.error("sendToolResultToClaude Unexpected code " + response.code() + ". Response body: " + responseBody, new IOException("Unexpected code " + response.code()));
-//                throw new IOException("sendToolResultToClaude Unexpected code " + response);
-//            }
-//
-//            String responseBody = response.body() != null ? response.body().string() : "";
-//            AIClaudeResponse claudeResponse = gson.fromJson(responseBody, AIClaudeResponse.class);
-//
-//            // 返回 Claude 的响应文本
-//            return claudeResponse.content.get(0).text;
-//        }
-//    }
-//    private String sendToolResultToOpenAI(ToolCall toolCall, String toolResult, List<Tool> availableTools, String url, String apiKey, String model) throws IOException {
-//        JsonObject jsonBody = new JsonObject();
-//        jsonBody.addProperty("model", model);
-//
-//        JsonArray messages = new JsonArray();
-//        for (Message message : conversationHistory) {
-//            JsonObject messageObject = new JsonObject();
-//            messageObject.addProperty("role", message.role);
-//            messageObject.addProperty("content", message.content);
-//            messages.add(messageObject);
-//        }
-//
-//        JsonObject toolResultMessage = new JsonObject();
-//        toolResultMessage.addProperty("role", "function");
-//        toolResultMessage.addProperty("name", toolCall.function.name);
-//        toolResultMessage.addProperty("content", toolResult);
-//        messages.add(toolResultMessage);
-//
-//        jsonBody.add("messages", messages);
-//
-//        JsonArray toolsArray = new JsonArray();
-//        for (Tool tool : availableTools) {
-//            toolsArray.add(tool.toOpenAIFormat());
-//        }
-//        jsonBody.add("tools", toolsArray);
-//
-//        RequestBody body = RequestBody.create(MediaType.parse("application/json"), jsonBody.toString());
-//
-//        Request request = new Request.Builder()
-//                .url(url)
-//                .post(body)
-//                .addHeader("Authorization", "Bearer " + apiKey)
-//                .addHeader("content-type", "application/json")
-//                .build();
-//
-//        try (Response response = client.newCall(request).execute()) {
-//            if (!response.isSuccessful()) {
-//                throw new IOException("Unexpected code " + response);
-//            }
-//
-//            String responseBody = response.body() != null ? response.body().string() : "";
-//            AIResponse openAIResponse = gson.fromJson(responseBody, AIResponse.class);
-//
-//            // 返回 OpenAI 的响应文本
-//            return openAIResponse.choices[0].message.content;
-//        }
-//    }
     private void updateContextIfNeeded(ToolCall toolCall, String toolResult) {
         if (toolCall.function.name.equals("read_file") || toolCall.function.name.equals("create_file")) {
             JsonObject args = gson.fromJson(toolCall.function.arguments, JsonObject.class);
@@ -364,15 +239,6 @@ public class BoykaAIService {
             history.append(message.role).append(": ").append(message.content).append("\n\n");
         }
         return history.toString();
-    }
-
-    private String getClaudeAnalysis(String analysisPrompt) throws IOException {
-        BoykaAILogger.info("Sending analysis prompt to Claude: " + analysisPrompt);
-        return claudeClient.sendMessage(analysisPrompt,"", availableTools);
-    }
-
-    private String getOpenAIAnalysis(String analysisPrompt) throws IOException {
-        return openAIClient.sendMessage(analysisPrompt, availableTools);
     }
 
 

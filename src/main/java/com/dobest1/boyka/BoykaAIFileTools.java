@@ -118,13 +118,16 @@ public class BoykaAIFileTools {
     }
 
     public List<String> listFiles(String path) {
-        if (path==null || path.isEmpty()) {
-            path = ".";
+        Path dirPath =null;
+
+        if (path==null || path.isEmpty()|| path.equals(".")) {
+            dirPath = workingDirectory;
+        }else{
+            dirPath = workingDirectory.resolve(path);
         }
 
-        Path dirPath = workingDirectory.resolve(path);
         if (!isValidPath(dirPath)) {
-            return Collections.singletonList("Error: 无效的路径"+dirPath);
+            return Collections.singletonList("Error: 无效的路径"+dirPath+workingDirectory);
         }
         try {
             return Files.list(dirPath)
@@ -138,14 +141,15 @@ public class BoykaAIFileTools {
     public String readFile(String path) {
         Path filePath = workingDirectory.resolve(path);
         if (!isValidPath(filePath)) {
-            return "";
+            BoykaAILogger.warn("Error: 读取文件失败"+filePath);
+            return "Error: 无效的路径"+filePath;
         }
         try {
             return new String(Files.readAllBytes(filePath));
         } catch (IOException e) {
             // 使用日志记录错误
-            BoykaAILogger.error("Error: 读取文件失败", e);
-            return "";
+            BoykaAILogger.error("Error: 读取文件失败"+path, e);
+            return "Error: 读取文件失败"+path;
         }
     }
 
@@ -266,7 +270,7 @@ public class BoykaAIFileTools {
                             .maxTokens(BoykaAISettings.getInstance().getState().maxTokens)
                             .build();
                     OpenAIClient openAIClient = new OpenAIClient(openAIConfig, systemPrompt);
-                    response= openAIClient.sendMessage(systemPrompt, Collections.emptyList());
+                    response= openAIClient.sendMessageNoHistory(systemPrompt, "Generate SEARCH/REPLACE blocks for the necessary changes.", "",Collections.emptyList());
                 }
                 // Update token usage for code editor
                 // Map<String, Integer> usage = aiService.getLastUsage();

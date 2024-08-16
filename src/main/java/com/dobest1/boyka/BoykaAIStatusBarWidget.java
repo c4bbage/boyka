@@ -41,7 +41,7 @@ public class BoykaAIStatusBarWidget implements StatusBarWidget, StatusBarWidget.
     @Nullable
     @Override
     public String getTooltipText() {
-        return "打开 Boyka AI 助手";
+        return "Boyka AI 助手";
     }
 
     @Nullable

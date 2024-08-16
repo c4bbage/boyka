@@ -1,5 +1,9 @@
 .gradle
 build/
+bin/
+.run/
+./idea/
+.gradle/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -24,7 +28,6 @@ out/
 .settings
 .springBeans
 .sts4-cache
-bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
 
@@ -39,4 +42,3 @@ bin/
 .vscode/
 
 ### Mac OS ###
-.DS_Store

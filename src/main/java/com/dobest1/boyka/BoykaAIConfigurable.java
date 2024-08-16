@@ -1,5 +1,6 @@
 package com.dobest1.boyka;
 
+import com.intellij.icons.AllIcons;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.ui.ComboBox;
@@ -67,28 +68,65 @@ public class BoykaAIConfigurable implements Configurable {
         JPanel panel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = createDefaultGBC();
 
-        panel.add(new JBLabel("OpenAI 地址:"), gbc);
-        openAIAddressField = new JBTextField();
+        // OpenAI 地址
+        JPanel addressLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JBLabel addressLabel = new JBLabel("OpenAI 地址:");
+        addressLabelPanel.add(addressLabel);
+
+        JBLabel infoLabel = new JBLabel(AllIcons.General.Information);
+        infoLabel.setToolTipText("示例: https://api.openai.com/v1/");
+        addressLabelPanel.add(infoLabel);
+
+        gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        panel.add(addressLabelPanel, gbc);
+
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        openAIAddressField = createConfiguredTextField();
         panel.add(openAIAddressField, gbc);
 
+        // OpenAI API 密钥
         gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JBLabel("OpenAI API 密钥:"), gbc);
-        openAIKeyField = new JBTextField();
+
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        openAIKeyField = createConfiguredTextField();
         panel.add(openAIKeyField, gbc);
 
+        // 选择模型
         gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JBLabel("选择模型:"), gbc);
+
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         openAIModelSelector = new ComboBox<>();
-        gbc.gridwidth = GridBagConstraints.REMAINDER;
         panel.add(openAIModelSelector, gbc);
+
+        // 刷新模型列表按钮
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         refreshModelsButton = new JButton("刷新模型列表");
         panel.add(refreshModelsButton, gbc);
-        gbc.gridwidth=1;
+
+        // 启用 OpenAI
+        gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JBLabel("启用OpenAI:"), gbc);
-        enableOpenai = new JCheckBox();  // 初始化 enableOpenai
+
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        enableOpenai = new JCheckBox();
         panel.add(enableOpenai, gbc);
 
         return panel;
@@ -98,42 +136,92 @@ public class BoykaAIConfigurable implements Configurable {
         JPanel panel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = createDefaultGBC();
 
-        panel.add(new JBLabel("Claude 地址:"), gbc);
-        claudeAddressField = new JBTextField();
+
+        JPanel addressLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JBLabel addressLabel = new JBLabel("Claude 地址:");
+        addressLabelPanel.add(addressLabel);
+
+        JBLabel infoLabel = new JBLabel(AllIcons.General.Information);
+        infoLabel.setToolTipText("示例: https://api.anthropic.com/v1/");
+        addressLabelPanel.add(infoLabel);
+
+        gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
+        panel.add(addressLabelPanel, gbc);
+
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        claudeAddressField = createConfiguredTextField();
         panel.add(claudeAddressField, gbc);
 
+
+
+        // Claude API 密钥
         gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JBLabel("Claude API 密钥:"), gbc);
-        claudeKeyField = new JBTextField();
+
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        claudeKeyField = createConfiguredTextField();
         panel.add(claudeKeyField, gbc);
 
+        // Claude 模型
         gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JBLabel("Claude 模型:"), gbc);
-        claudeModelField = new JBTextField();
+
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        claudeModelField = createConfiguredTextField();
         panel.add(claudeModelField, gbc);
-        gbc.gridwidth=1;
+
+        // 启用 Claude
+        gbc.gridwidth = 1;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         panel.add(new JBLabel("启用Claude:"), gbc);
-        enableClaude = new JCheckBox();  // 初始化 enableClaude
+
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        enableClaude = new JCheckBox();
         panel.add(enableClaude, gbc);
 
         return panel;
     }
 
+    private JBTextField createConfiguredTextField() {
+        JBTextField textField = new JBTextField();
+        textField.setPreferredSize(new Dimension(300, textField.getPreferredSize().height));
+        return textField;
+    }
+
+
+
     private JPanel createCommonPanel() {
         JPanel panel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = createDefaultGBC();
 
+        // 第一行：最大 Tokens
+        gbc.gridwidth = 1;
         panel.add(new JBLabel("最大 Tokens:"), gbc);
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
         maxTokensField = new JBTextField();
-        gbc.gridwidth = GridBagConstraints.REMAINDER;
         panel.add(maxTokensField, gbc);
+
+        // 第二行：自动重复次数
+        gbc.gridwidth = 1;
+        gbc.gridy = 1;
         panel.add(new JBLabel("自动重复次数:"), gbc);
-        autoRepeatCountField = new JBTextField();
         gbc.gridwidth = GridBagConstraints.REMAINDER;
+        autoRepeatCountField = new JBTextField();
         panel.add(autoRepeatCountField, gbc);
+
         return panel;
     }
 

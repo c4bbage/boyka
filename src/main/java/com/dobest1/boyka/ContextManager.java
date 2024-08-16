@@ -5,6 +5,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,32 +13,46 @@ import java.util.List;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ContextManager {
     private final Project project;
     private final List<String> contextFiles;
-    private final Map<String, String> fileContents;
+    private final List<ContextChangeListener> listeners;
+    private final ConcurrentHashMap<String, String> fileContents;
+
     public static ContextManager getInstance(Project project) {
         return ServiceManager.getService(project, ContextManager.class);
     }
 
     public ContextManager(Project project) {
         this.project = project;
-        this.contextFiles = new ArrayList<>();
-        this.fileContents = new HashMap<>();
+        this.contextFiles = new CopyOnWriteArrayList<>();
+        this.listeners = new ArrayList<>();
+        this.fileContents = new ConcurrentHashMap<>();
+
     }
+
+    public void addFileToContext(String filePath) {
+        if (!contextFiles.contains(filePath)) {
+            contextFiles.add(filePath);
+            BoykaAILogger.info("File added to context: " + filePath);
+            notifyContextChanged();
+        }
+    }
+
     public boolean isFileInContext(String filePath) {
         return contextFiles.contains(filePath);
     }
 
-    private List<ContextChangeListener> listeners = new ArrayList<>();
-
-    public interface ContextChangeListener {
-        void onContextChanged();
+    public List<String> getContextFiles() {
+        return new ArrayList<>(contextFiles);
     }
 
     public void addContextChangeListener(ContextChangeListener listener) {
-        listeners.add(listener);
+        if (!listeners.contains(listener)) {
+            listeners.add(listener);
+        }
     }
 
     public void removeContextChangeListener(ContextChangeListener listener) {
@@ -45,25 +60,21 @@ public class ContextManager {
     }
 
     public void notifyContextChanged() {
+        BoykaAILogger.info("Notifying context change to " + listeners.size() + " listeners");
         for (ContextChangeListener listener : listeners) {
             listener.onContextChanged();
         }
     }
 
-    public void addFileToContext(String filePath) {
-        if (!contextFiles.contains(filePath)) {
-            contextFiles.add(filePath);
-            notifyContextChanged();
-        }
+    public interface ContextChangeListener {
+        void onContextChanged();
     }
+
 
     public void removeFileFromContext(String filePath) {
         contextFiles.remove(filePath);
     }
 
-    public List<String> getContextFiles() {
-        return new ArrayList<>(contextFiles);
-    }
 
     public List<String> searchProjectFiles(String query) {
         List<String> results = new ArrayList<>();
@@ -98,8 +109,9 @@ public class ContextManager {
     }
 
     public String getFileContent(String filePath) {
-        return fileContents.get(filePath);
+        return fileContents.getOrDefault(filePath, "");
     }
+
 
     public String getFullContext() {
         StringBuilder context = new StringBuilder();
