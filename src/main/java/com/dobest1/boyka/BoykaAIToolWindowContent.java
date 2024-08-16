@@ -78,6 +78,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             myToolWindowContent.add(tabbedPane, BorderLayout.CENTER);
             fileTools = new BoykaAIFileTools(project);
             aiService = new BoykaAIService(fileTools, contextManager);  // 传入两个参数
+
         } catch (Exception e) {
             BoykaAILogger.error("Error creating BoykaAI tool window content", e);
         }
@@ -122,9 +123,9 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         clearButton.addActionListener(e -> clearConversation());
         autoButton = new JButton("自动");
         autoButton.addActionListener(e -> startAutoRepeat());
-        modelSelector = new ComboBox<>(new String[]{"claude-3.5-sonnet", "gpt-3.5-turbo"});
+        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+        modelSelector = new ComboBox<>(new String[]{settings.selectedModel != null ? settings.selectedModel : "gpt-3.5-turbo"});
         modelSelector.addActionListener(e -> updateChatTabTitle());
-
         JPanel inputPanel = new JPanel(new BorderLayout());
 
         // 创建一个包含输入框的面板，设置为两行高
@@ -142,11 +143,17 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         // 将输入框面板和按钮面板添加到输入面板
         inputPanel.add(textFieldPanel, BorderLayout.CENTER);
         inputPanel.add(buttonPanel, BorderLayout.SOUTH);
-
         chatPanel.add(chatScrollPane, BorderLayout.CENTER);
         chatPanel.add(inputPanel, BorderLayout.SOUTH);
 
         return chatPanel;
+    }
+    // 添加这个方法来滚动到底部
+    private void scrollToBottom() {
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar vertical = ((JScrollPane) chatHistory.getParent().getParent()).getVerticalScrollBar();
+            vertical.setValue(vertical.getMaximum());
+        });
     }
     private void startAutoRepeat() {
         String continueText = inputField.getText();
@@ -252,7 +259,13 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             // 获取刷新按钮和模型选择器
             refreshModelsButton = configurable.getRefreshModelsButton();
             modelSelector = configurable.getOpenAIModelSelector();
-
+            // 同步两个 modelSelector
+            modelSelector.addActionListener(e -> {
+                    String selectedModel = (String) modelSelector.getSelectedItem();
+                    if (selectedModel != null) {
+                        modelSelector.setSelectedItem(selectedModel);
+                    }
+                });
             // 添加刷新模型列表的功能
             refreshModelsButton.addActionListener(e -> refreshModels());
 
@@ -278,6 +291,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             configurable.apply();
             BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
             aiService.updateSettings(settings);
+            modelSelector.setSelectedItem(settings.selectedModel);
             updateChatTabTitle();
             JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
         } catch (ConfigurationException e) {
@@ -294,7 +308,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         if (!message.isEmpty()) {
             sendButton.setEnabled(false);
             continueButton.setEnabled(false);
-            autoButton. setEnabled(false);
+            autoButton.setEnabled(false);
             chatHistory.append("你: " + message + "\n");
             try {
                 ProgressManager.getInstance().run(new Task.Backgroundable(project, "正在获取AI响应") {
@@ -317,6 +331,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                             }
                             VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
                             inputField.setText("");
+                            scrollToBottom(); // 滚动到底部
                             updateChatTabTitle();
                             if (remainingAutoRepeatCount > 0) {
                                 sendAutoContinueMessage(message);
@@ -457,14 +472,19 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             public void run(@NotNull ProgressIndicator indicator) {
                 List<String> models = fetchAvailableModels();
                 SwingUtilities.invokeLater(() -> {
+                    String currentModel = (String) modelSelector.getSelectedItem();
                     DefaultComboBoxModel<String> model = (DefaultComboBoxModel<String>) modelSelector.getModel();
                     model.removeAllElements();
                     for (String modelName : models) {
                         model.addElement(modelName);
                     }
                     if (!models.isEmpty()) {
-                        modelSelector.setSelectedItem(models.get(0));
-                        updateChatTabTitle();  // Update the chat tab title after refreshing models
+                        if (models.contains(currentModel)) {
+                            modelSelector.setSelectedItem(currentModel);
+                        } else {
+                            modelSelector.setSelectedItem(models.get(0));
+                        }
+                        updateChatTabTitle();
                     }
                 });
             }

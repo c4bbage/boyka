@@ -244,6 +244,9 @@ public class BoykaAIConfigurable implements Configurable {
         enableClaude.setSelected(state.enableClaude);
         enableOpenai.setSelected(state.enableOpenai);
         autoRepeatCountField.setText(String.valueOf(state.autoRepeatCount));
+        if (state.selectedModel != null && !state.selectedModel.isEmpty()) {
+            openAIModelSelector.setSelectedItem(state.selectedModel);
+        }
         openAIModelSelector.setSelectedItem(state.selectedModel);
     }
 
