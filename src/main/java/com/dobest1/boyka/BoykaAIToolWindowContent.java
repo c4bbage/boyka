@@ -1,33 +1,29 @@
 package com.dobest1.boyka;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.intellij.openapi.options.ConfigurationException;
-import com.intellij.openapi.project.Project;
-import com.intellij.openapi.vfs.VirtualFileManager;
-import com.intellij.openapi.wm.ToolWindow;
-import com.intellij.ui.components.*;
-import com.intellij.openapi.ui.ComboBox;
-import com.intellij.openapi.fileChooser.FileChooser;
-import com.intellij.openapi.fileChooser.FileChooserDescriptor;
-import com.intellij.openapi.vfs.VirtualFile;
-
-import javax.swing.*;
-import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
-
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.Task;
+import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.Messages;
-import org.jetbrains.annotations.NotNull;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonArray;
-import com.google.gson.Gson;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.wm.ToolWindow;
+import com.intellij.ui.components.*;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import javax.swing.*;
+import java.awt.*;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BoykaAIToolWindowContent implements ContextManager.ContextChangeListener {
     private Project project;  // Added project field
@@ -45,7 +41,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     private DefaultListModel<String> contextFilesModel;
     private JBTextField contextSearchField;
     private JButton continueButton;
-    private Gson gson = new Gson();
+    private final Gson gson = new Gson();
     private JButton clearButton;
 
     private JTextField openAIBaseAddressField;
@@ -53,8 +49,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     private JTextField claudeAddressField;
     private JTextField claudeKeyField;
     private JButton autoButton;
-    private int remainingAutoRepeatCount;
-    private OkHttpClient client = new OkHttpClient();
+    private int remainingAutoRepeatCount = 0;
+    private final OkHttpClient client = new OkHttpClient();
 
     public BoykaAIToolWindowContent(Project project, ToolWindow toolWindow) {
         try {
@@ -66,6 +62,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             // Chat tab
             JPanel chatPanel = createChatPanel();
             tabbedPane.addTab("聊天", chatPanel);
+            JPanel chatPanelmk = new EnhancedChatPanel(project);
+            tabbedPane.addTab("聊天mk", chatPanelmk);
 
             // Context tab
             JPanel contextPanel = createContextPanel(project);
@@ -82,282 +80,6 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         } catch (Exception e) {
             BoykaAILogger.error("Error creating BoykaAI tool window content", e);
         }
-    }
-
-    private void sendContinueMessage() {
-        if (inputField.getText().isEmpty()) {
-            inputField.setText("继续");
-        }
-        sendMessage();
-    }
-
-
-    @Override
-    public void onContextChanged() {
-        BoykaAILogger.info("contextFilesModel Context files changed");
-        SwingUtilities.invokeLater(() -> {
-            contextFilesModel.clear();
-            BoykaAILogger.info("Adding file to contextFilesModel: " + contextManager.getContextFiles().size());
-            for (String filePath : contextManager.getContextFiles()) {
-                BoykaAILogger.info("Adding file to contextFilesModel: " + filePath);
-                contextFilesModel.addElement(filePath);
-            }
-        });
-    }
-
-
-    private JPanel createChatPanel() {
-        JPanel chatPanel = new JPanel(new BorderLayout());
-
-        chatHistory = new JBTextArea();
-        chatHistory.setEditable(false);
-        chatHistory.setLineWrap(true);
-        JBScrollPane chatScrollPane = new JBScrollPane(chatHistory);
-
-        inputField = new JBTextField();
-        sendButton = new JButton("发送");
-        sendButton.addActionListener(e -> sendMessage());
-        continueButton = new JButton("继续");
-        continueButton.addActionListener(e -> sendContinueMessage());
-        clearButton = new JButton("清空");
-        clearButton.addActionListener(e -> clearConversation());
-        autoButton = new JButton("自动");
-        autoButton.addActionListener(e -> startAutoRepeat());
-        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
-        modelSelector = new ComboBox<>(new String[]{settings.selectedModel != null ? settings.selectedModel : "gpt-3.5-turbo"});
-        modelSelector.addActionListener(e -> updateChatTabTitle());
-        JPanel inputPanel = new JPanel(new BorderLayout());
-
-        // 创建一个包含输入框的面板，设置为两行高
-        JPanel textFieldPanel = new JPanel(new BorderLayout());
-        inputField.setPreferredSize(new Dimension(inputField.getPreferredSize().width, inputField.getPreferredSize().height * 2));
-        textFieldPanel.add(inputField, BorderLayout.CENTER);
-
-        // 创建按钮面板，使用 FlowLayout 并右对齐
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttonPanel.add(clearButton);
-        buttonPanel.add(autoButton);
-        buttonPanel.add(continueButton);
-        buttonPanel.add(sendButton);
-
-        // 将输入框面板和按钮面板添加到输入面板
-        inputPanel.add(textFieldPanel, BorderLayout.CENTER);
-        inputPanel.add(buttonPanel, BorderLayout.SOUTH);
-        chatPanel.add(chatScrollPane, BorderLayout.CENTER);
-        chatPanel.add(inputPanel, BorderLayout.SOUTH);
-
-        return chatPanel;
-    }
-    // 添加这个方法来滚动到底部
-    private void scrollToBottom() {
-        SwingUtilities.invokeLater(() -> {
-            JScrollBar vertical = ((JScrollPane) chatHistory.getParent().getParent()).getVerticalScrollBar();
-            vertical.setValue(vertical.getMaximum());
-        });
-    }
-    private void startAutoRepeat() {
-        String continueText = inputField.getText();
-        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
-        remainingAutoRepeatCount = settings.autoRepeatCount;
-        sendAutoContinueMessage(continueText);
-    }
-
-    private void sendAutoContinueMessage(String continueText) {
-        if (remainingAutoRepeatCount > 0) {
-            if(inputField.getText().equals("继续")||inputField.getText().isEmpty()) {
-                inputField.setText("继续");
-            }
-            sendMessage();
-            inputField.setText(continueText);
-            remainingAutoRepeatCount--;
-        }
-    }
-
-    private void updateChatTabTitle() {
-        String selectedModel = (String) modelSelector.getSelectedItem();
-        if (selectedModel == null) {
-            tabbedPane.setTitleAt(0, "聊天");
-            return;
-        }
-        tabbedPane.setTitleAt(0, "聊天 - " + selectedModel);
-    }
-
-    private JPanel createContextPanel(Project project) {
-        JPanel contextPanel = new JPanel(new BorderLayout());
-
-        contextFilesModel = new DefaultListModel<>();
-        contextFilesList = new JBList<>(contextFilesModel);
-        JBScrollPane contextScrollPane = new JBScrollPane(contextFilesList);
-
-        JPanel controlPanel = new JPanel(new BorderLayout());
-        contextSearchField = new JBTextField();
-        JButton addFileButton = new JButton("添加文件");
-        JButton removeFileButton = new JButton("移除文件");
-
-        controlPanel.add(contextSearchField, BorderLayout.CENTER);
-        controlPanel.add(addFileButton, BorderLayout.EAST);
-
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        buttonPanel.add(addFileButton);
-        buttonPanel.add(removeFileButton);
-
-        contextPanel.add(contextScrollPane, BorderLayout.CENTER);
-        contextPanel.add(controlPanel, BorderLayout.NORTH);
-        contextPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-        // 添加文件到上下文
-        addFileButton.addActionListener(e -> {
-            String query = contextSearchField.getText();
-            if (query.startsWith("+")) {
-                // 添加外部文件
-                String filePath = contextManager.addExternalFile(query.substring(1).trim());
-                if (filePath != null && !contextFilesModel.contains(filePath)) {
-                    contextFilesModel.addElement(filePath);
-                }
-            } else {
-                // 搜索项目文件
-                List<String> results = contextManager.searchProjectFiles(query);
-                if (!results.isEmpty()) {
-                    String selectedFile = (String) JOptionPane.showInputDialog(
-                            contextPanel,
-                            "选择文件",
-                            "添加到上下文",
-                            JOptionPane.PLAIN_MESSAGE,
-                            null,
-                            results.toArray(),
-                            results.get(0));
-                    if (selectedFile != null && !contextFilesModel.contains(selectedFile)) {
-                        contextManager.addFileToContext(selectedFile);
-                        contextFilesModel.addElement(selectedFile);
-                    }
-                }
-            }
-        });
-
-        // 从上下文中移除文件
-        removeFileButton.addActionListener(e -> {
-            int selectedIndex = contextFilesList.getSelectedIndex();
-            if (selectedIndex != -1) {
-                String filePath = contextFilesModel.get(selectedIndex);
-                contextManager.removeFileFromContext(filePath);
-                contextFilesModel.remove(selectedIndex);
-            }
-        });
-
-        return contextPanel;
-    }
-
-    private JPanel createSettingsPanel() {
-        try {
-            BoykaAIConfigurable configurable = new BoykaAIConfigurable();
-            JComponent settingsComponent = configurable.createComponent();
-
-            // 创建一个新的 JPanel 来包含设置组件和保存按钮
-            JPanel settingsPanel = new JPanel(new BorderLayout());
-            settingsPanel.add(settingsComponent, BorderLayout.CENTER);
-
-            // 获取刷新按钮和模型选择器
-            refreshModelsButton = configurable.getRefreshModelsButton();
-            modelSelector = configurable.getOpenAIModelSelector();
-            // 同步两个 modelSelector
-            modelSelector.addActionListener(e -> {
-                    String selectedModel = (String) modelSelector.getSelectedItem();
-                    if (selectedModel != null) {
-                        modelSelector.setSelectedItem(selectedModel);
-                    }
-                });
-            // 添加刷新模型列表的功能
-            refreshModelsButton.addActionListener(e -> refreshModels());
-
-            // 创建一个面板来容纳保存按钮
-            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-            JButton saveButton = new JButton("保存设置");
-            saveButton.addActionListener(e -> saveSettings(configurable));
-            buttonPanel.add(saveButton);
-
-            // 将按钮面板添加到设置面板的底部
-            settingsPanel.add(buttonPanel, BorderLayout.SOUTH);
-
-            return settingsPanel;
-        } catch (Exception e) {
-            e.printStackTrace();
-            BoykaAILogger.error("Error creating settings panel", e);
-            return null;
-        }
-    }
-
-    private void saveSettings(BoykaAIConfigurable configurable) {
-        try {
-            configurable.apply();
-            BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
-            aiService.updateSettings(settings);
-            modelSelector.setSelectedItem(settings.selectedModel);
-            updateChatTabTitle();
-            JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
-        } catch (ConfigurationException e) {
-            JOptionPane.showMessageDialog(myToolWindowContent, "保存设置失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
-        }
-    }
-
-    public JComponent getContent() {
-        return myToolWindowContent;
-    }
-
-    private void sendMessage() {
-        String message = inputField.getText();
-        if (!message.isEmpty()) {
-            sendButton.setEnabled(false);
-            continueButton.setEnabled(false);
-            autoButton.setEnabled(false);
-            chatHistory.append("你: " + message + "\n");
-            try {
-                ProgressManager.getInstance().run(new Task.Backgroundable(project, "正在获取AI响应") {
-                    @Override
-                    public void run(@NotNull ProgressIndicator indicator) {
-                        indicator.setIndeterminate(true);
-                        String context = getContext();
-                        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
-                        inputField.setEnabled(false);
-                        String aiResponse = aiService.getAIResponse(message, context);
-                        inputField.setEnabled(true);
-                        fileTools.refreshFileSystem(project.getProjectFilePath());
-                        SwingUtilities.invokeLater(() -> {
-                            if (aiResponse.startsWith("Error:")) {
-                                chatHistory.append("AI: 抱歉，发生了一个错误。\n");
-                                chatHistory.append(aiResponse + "\n");
-                                Messages.showErrorDialog(project, aiResponse, "AI响应错误");
-                            } else {
-                                chatHistory.append("AI: " + aiResponse + "\n");
-                            }
-                            VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
-                            inputField.setText("");
-                            scrollToBottom(); // 滚动到底部
-                            updateChatTabTitle();
-                            if (remainingAutoRepeatCount > 0) {
-                                sendAutoContinueMessage(message);
-                            }
-                        });
-                    }
-                });
-
-            } catch (Exception e) {
-                BoykaAILogger.error("Error sending message", e);
-            } finally {
-                sendButton.setEnabled(true);
-                continueButton.setEnabled(true);
-                autoButton.setEnabled(true);
-            }
-
-        }
-    }
-
-    private String getContext() {
-        StringBuilder contextBuilder = new StringBuilder();
-        for (String filePath : contextManager.getContextFiles()) {
-            contextBuilder.append("File: ").append(filePath).append("\n");
-            contextBuilder.append(fileTools.readFile(filePath)).append("\n\n");
-        }
-        return contextBuilder.toString();
     }
 
     public static List<Tool> createAvailableTools() {
@@ -377,6 +99,17 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                 "在指定路径创建具有给定内容的新文件。当需要在项目结构中创建新文件时使用此工具。如果不存在，它将创建所有必要的父目录。如果文件创建成功，工具将返回成功消息，如果创建文件时出现问题或文件已存在，则返回错误消息。内容应尽可能完整和有用，包括必要的导入、函数定义和注释。",
                 createFileProperties,
                 new String[]{"path", "content"}));
+// Create File Tool
+        JsonObject createFolderProperties = new JsonObject();
+        JsonObject createFolderpathProperty = new JsonObject();
+        createFolderpathProperty.addProperty("type", "string");
+        createFolderpathProperty.addProperty("description", "应该在其中创建文件夹的绝对或相对路径。使用正斜杠(/)分隔路径，即使在Windows系统上也是如此。");
+        createFolderProperties.add("path", pathProperty);
+        tools.add(new Tool("create_folder",
+                "在指定的路径上创建一个新文件夹。当您需要在项目结构中创建新目录时，应使用此工具。如果父目录不存在，它将创建所有必需的父目录。如果文件夹已创建或已经存在，该工具将返回成功消息，如果创建文件夹有问题，则返回错误消息。"
+                        ,
+                createFileProperties,
+                new String[]{"path"}));
 
         // Edit and Apply Tool
         JsonObject editAndApplyProperties = new JsonObject();
@@ -464,6 +197,296 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                 new String[]{"path"}));
 
         return tools;
+    }
+
+    private void sendContinueMessage() {
+        if (inputField.getText().isEmpty()) {
+            inputField.setText("继续");
+        }
+        sendMessage();
+    }
+
+    @Override
+    public void onContextChanged() {
+        BoykaAILogger.info("contextFilesModel Context files changed");
+        SwingUtilities.invokeLater(() -> {
+            contextFilesModel.clear();
+            BoykaAILogger.info("Adding file to contextFilesModel: " + contextManager.getContextFiles().size());
+            for (String filePath : contextManager.getContextFiles()) {
+                BoykaAILogger.info("Adding file to contextFilesModel: " + filePath);
+                contextFilesModel.addElement(filePath);
+            }
+        });
+    }
+
+    private JPanel createChatPanel() {
+        JPanel chatPanel = new JPanel(new BorderLayout());
+
+        chatHistory = new JBTextArea();
+        chatHistory.setEditable(false);
+        chatHistory.setLineWrap(true);
+        JBScrollPane chatScrollPane = new JBScrollPane(chatHistory);
+
+        inputField = new JBTextField();
+        sendButton = new JButton("发送");
+        sendButton.addActionListener(e -> sendMessage());
+        continueButton = new JButton("继续");
+        continueButton.addActionListener(e -> sendContinueMessage());
+        clearButton = new JButton("清空");
+        clearButton.addActionListener(e -> clearConversation());
+        autoButton = new JButton("自动");
+        autoButton.addActionListener(e -> startAutoRepeat());
+        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+        modelSelector = new ComboBox<>(new String[]{settings.selectedModel != null ? settings.selectedModel : "gpt-3.5-turbo"});
+        modelSelector.addActionListener(e -> updateChatTabTitle());
+        JPanel inputPanel = new JPanel(new BorderLayout());
+
+        // 创建一个包含输入框的面板，设置为两行高
+        JPanel textFieldPanel = new JPanel(new BorderLayout());
+        inputField.setPreferredSize(new Dimension(inputField.getPreferredSize().width, inputField.getPreferredSize().height * 2));
+        textFieldPanel.add(inputField, BorderLayout.CENTER);
+
+        // 创建按钮面板，使用 FlowLayout 并右对齐
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(clearButton);
+        buttonPanel.add(autoButton);
+        buttonPanel.add(continueButton);
+        buttonPanel.add(sendButton);
+
+        // 将输入框面板和按钮面板添加到输入面板
+        inputPanel.add(textFieldPanel, BorderLayout.CENTER);
+        inputPanel.add(buttonPanel, BorderLayout.SOUTH);
+        chatPanel.add(chatScrollPane, BorderLayout.CENTER);
+        chatPanel.add(inputPanel, BorderLayout.SOUTH);
+
+        return chatPanel;
+    }
+
+    // 添加这个方法来滚动到底部
+    private void scrollToBottom() {
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar vertical = ((JScrollPane) chatHistory.getParent().getParent()).getVerticalScrollBar();
+            vertical.setValue(vertical.getMaximum());
+        });
+    }
+
+    private void startAutoRepeat() {
+        String continueText = inputField.getText();
+        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+        remainingAutoRepeatCount = settings.autoRepeatCount;
+        sendAutoContinueMessage(continueText);
+    }
+
+    private void sendAutoContinueMessage(String continueText) {
+        if (remainingAutoRepeatCount > 0) {
+            if (inputField.getText().equals("继续") || inputField.getText().isEmpty()) {
+                inputField.setText("继续");
+            }
+            sendMessage();
+            inputField.setText(continueText);
+            remainingAutoRepeatCount--;
+        }
+    }
+
+    private void updateChatTabTitle() {
+        BoykaAISettings.@Nullable State settings = BoykaAISettings.getInstance().getState();
+        if (settings.enableOpenai) {
+            String selectedModel = (String) modelSelector.getSelectedItem();
+            if (selectedModel == null) {
+                tabbedPane.setTitleAt(0, "聊天");
+                return;
+            }
+            tabbedPane.setTitleAt(0, "聊天 - " + selectedModel);
+        } else {
+            tabbedPane.setTitleAt(0, "聊天 - " + "Claude-3.5-sonnet");
+        }
+    }
+
+    private JPanel createContextPanel(Project project) {
+        JPanel contextPanel = new JPanel(new BorderLayout());
+
+        contextFilesModel = new DefaultListModel<>();
+        contextFilesList = new JBList<>(contextFilesModel);
+        JBScrollPane contextScrollPane = new JBScrollPane(contextFilesList);
+
+        JPanel controlPanel = new JPanel(new BorderLayout());
+        contextSearchField = new JBTextField();
+        JButton addFileButton = new JButton("添加文件");
+        JButton removeFileButton = new JButton("移除文件");
+
+        controlPanel.add(contextSearchField, BorderLayout.CENTER);
+        controlPanel.add(addFileButton, BorderLayout.EAST);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonPanel.add(addFileButton);
+        buttonPanel.add(removeFileButton);
+
+        contextPanel.add(contextScrollPane, BorderLayout.CENTER);
+        contextPanel.add(controlPanel, BorderLayout.NORTH);
+        contextPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+        // 添加文件到上下文
+        addFileButton.addActionListener(e -> {
+            String query = contextSearchField.getText();
+            if (query.startsWith("+")) {
+                // 添加外部文件
+                String filePath = contextManager.addExternalFile(query.substring(1).trim());
+                if (filePath != null && !contextFilesModel.contains(filePath)) {
+                    contextFilesModel.addElement(filePath);
+                }
+            } else {
+                // 搜索项目文件
+                List<String> results = contextManager.searchProjectFiles(query);
+                if (!results.isEmpty()) {
+                    String selectedFile = (String) JOptionPane.showInputDialog(
+                            contextPanel,
+                            "选择文件",
+                            "添加到上下文",
+                            JOptionPane.PLAIN_MESSAGE,
+                            null,
+                            results.toArray(),
+                            results.get(0));
+                    if (selectedFile != null && !contextFilesModel.contains(selectedFile)) {
+                        contextManager.addFileToContext(selectedFile);
+                        contextFilesModel.addElement(selectedFile);
+                    }
+                }
+            }
+        });
+
+        // 从上下文中移除文件
+        removeFileButton.addActionListener(e -> {
+            int selectedIndex = contextFilesList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                String filePath = contextFilesModel.get(selectedIndex);
+                contextManager.removeFileFromContext(filePath);
+                contextFilesModel.remove(selectedIndex);
+            }
+        });
+
+        return contextPanel;
+    }
+
+    private JPanel createSettingsPanel() {
+        try {
+            BoykaAIConfigurable configurable = new BoykaAIConfigurable();
+            JComponent settingsComponent = configurable.createComponent();
+
+            // 创建一个新的 JPanel 来包含设置组件和保存按钮
+            JPanel settingsPanel = new JPanel(new BorderLayout());
+            settingsPanel.add(settingsComponent, BorderLayout.CENTER);
+
+            // 获取刷新按钮和模型选择器
+            refreshModelsButton = configurable.getRefreshModelsButton();
+            modelSelector = configurable.getOpenAIModelSelector();
+            // 同步两个 modelSelector
+            modelSelector.addActionListener(e -> {
+                String selectedModel = (String) modelSelector.getSelectedItem();
+                if (selectedModel != null) {
+                    modelSelector.setSelectedItem(selectedModel);
+                }
+            });
+            // 添加刷新模型列表的功能
+            refreshModelsButton.addActionListener(e -> refreshModels());
+
+            // 创建一个面板来容纳保存按钮
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            JButton saveButton = new JButton("保存设置");
+            saveButton.addActionListener(e -> saveSettings(configurable));
+            buttonPanel.add(saveButton);
+
+            // 将按钮面板添加到设置面板的底部
+            settingsPanel.add(buttonPanel, BorderLayout.SOUTH);
+
+            return settingsPanel;
+        } catch (Exception e) {
+            e.printStackTrace();
+            BoykaAILogger.error("Error creating settings panel", e);
+            return null;
+        }
+    }
+
+    private void saveSettings(BoykaAIConfigurable configurable) {
+        try {
+            configurable.apply();
+            BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+            aiService.updateSettings(settings);
+            modelSelector.setSelectedItem(settings.selectedModel);
+            updateChatTabTitle();
+            JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
+        } catch (ConfigurationException e) {
+            JOptionPane.showMessageDialog(myToolWindowContent, "保存设置失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    public JComponent getContent() {
+        return myToolWindowContent;
+    }
+
+    private void sendMessage() {
+        String message = inputField.getText();
+        if (!message.isEmpty()) {
+            sendButton.setEnabled(false);
+            continueButton.setEnabled(false);
+            autoButton.setEnabled(false);
+            chatHistory.append("你: " + message + "\n");
+            try {
+                BoykaAISettings.@Nullable State settings = BoykaAISettings.getInstance().getState();
+                String title = "正在获取AI响应";
+                if (remainingAutoRepeatCount != 0) {
+                    int c = settings.autoRepeatCount - remainingAutoRepeatCount+1;
+                    title = "正在获取AI响应(第" + c + "次)";
+                }
+
+                ProgressManager.getInstance().run(new Task.Backgroundable(project, title) {
+                    @Override
+                    public void run(@NotNull ProgressIndicator indicator) {
+                        indicator.setIndeterminate(true);
+                        String context = getContext();
+                        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+                        inputField.setEnabled(false);
+                        String aiResponse = aiService.getAIResponse(message, context);
+                        inputField.setEnabled(true);
+                        fileTools.refreshFileSystem(project.getProjectFilePath());
+                        SwingUtilities.invokeLater(() -> {
+                            if (aiResponse.startsWith("Error:")) {
+                                chatHistory.append("AI: 抱歉，发生了一个错误。\n");
+                                chatHistory.append(aiResponse + "\n");
+                                Messages.showErrorDialog(project, aiResponse, "AI响应错误");
+                            } else if (aiResponse.isEmpty()) {
+                                chatHistory.append("AI: 抱歉，点击继续\n");
+                            } else {
+                                chatHistory.append("AI: " + aiResponse + "\n");
+                            }
+                            VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
+                            inputField.setText("");
+                            scrollToBottom(); // 滚动到底部
+                            updateChatTabTitle();
+                            if (remainingAutoRepeatCount > 0) {
+                                sendAutoContinueMessage(message);
+                            }
+                        });
+                    }
+                });
+
+            } catch (Exception e) {
+                BoykaAILogger.error("Error sending message", e);
+            } finally {
+                sendButton.setEnabled(true);
+                continueButton.setEnabled(true);
+                autoButton.setEnabled(true);
+            }
+
+        }
+    }
+
+    private String getContext() {
+        StringBuilder contextBuilder = new StringBuilder();
+        for (String filePath : contextManager.getContextFiles()) {
+            contextBuilder.append("File: ").append(filePath).append("\n");
+            contextBuilder.append(fileTools.readFile(filePath)).append("\n\n");
+        }
+        return contextBuilder.toString();
     }
 
     private void refreshModels() {

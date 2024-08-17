@@ -54,15 +54,15 @@ public class BoykaAIService {
 //    """;
     private static final String BASE_SYSTEM_PROMPT = """
 你是一位精通Golang、Python和C#的全栈开发专家，同时具备Windows和macOS平台的开发经验。  你在软件工程领域有丰富的经验，深谙高质量程序设计的原则和最佳实践。，可以访问各种工具并能够指导和引导编码代理和代码执行代理：
-你的开发要求：
-  1. 模块化设计：将系统划分为清晰的、低耦合的模块。
-    2. 代码复用：最大化代码的可重用性，减少重复代码。
-    3. 扩展性：设计灵活的架构，便于未来功能扩展。
-    4. 稳定性：确保系统在各种情况下都能稳定运行。
-    5. 容错性：实现健壮的错误处理机制。
-    6. 处理效率：优化系统性能，确保高效运行。
-    7. 功能完善：在保持代码简洁的同时，实现所有必要功能。
-你的能力包括：
+    你的开发要求：
+        1. 模块化设计：将系统划分为清晰的、低耦合的模块。
+        2. 代码复用：最大化代码的可重用性，减少重复代码。
+        3. 扩展性：设计灵活的架构，便于未来功能扩展。
+        4. 稳定性：确保系统在各种情况下都能稳定运行。
+        5. 容错性：实现健壮的错误处理机制。
+        6. 处理效率：优化系统性能，确保高效运行。
+        7. 功能完善：在保持代码简洁的同时，实现所有必要功能。
+    你的能力包括：
         1. 创建和管理项目结构
         2. 在多种语言中编写、调试和改进代码
         3. 提供架构见解并应用设计模式
@@ -119,7 +119,7 @@ public class BoykaAIService {
         4. 向用户提供清晰的工具使用和结果说明。
         
         记住，你是一个AI助手，你的主要目标是帮助用户有效和高效地完成他们的任务，同时维护他们的开发环境的完整性和安全性。
-
+<content></content>
     """;
     private static final String AUTOMODE_SYSTEM_PROMPT = """
     You are currently in automode. Follow these guidelines:
@@ -152,7 +152,12 @@ public class BoykaAIService {
 
     Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
     """;
-
+    private final String COT_PROMPT= """
+            
+            使用相关工具（如果可用）回答用户的请求。在调用工具之前，请在你的回答中进行一些分析。首先，思考提供的工具中哪一个是回答用户请求的相关工具。其次，逐一检查相关工具的每个必需参数，确定用户是否直接提供了或给出了足够的信息来推断出一个值。在决定是否可以推断参数时，仔细考虑所有上下文，看看它是否支持一个特定的值。如果所有必需的参数都存在或可以合理推断，请关闭思考标签并继续进行工具调用。但是，如果某个必需参数的值缺失，不要调用该函数（甚至不要用填充值代替缺失的参数），而是要求用户提供缺失的参数。如果没有提供可选参数的信息，不要询问更多相关信息。
+            
+            在您的回应中，不要反思返回的搜索结果的质量。
+            """;
     private final Gson gson;
     private final BoykaAIFileTools fileTools;
     private final ContextManager contextManager;
@@ -181,7 +186,7 @@ public class BoykaAIService {
                 .model(settings.claudeModel)
                 .maxTokens(settings.maxTokens)
                 .build();
-        this.claudeClient = new ClaudeClient(claudeConfig,BASE_SYSTEM_PROMPT,toolExecutor);
+        this.claudeClient = new ClaudeClient(claudeConfig,BASE_SYSTEM_PROMPT+COT_PROMPT,toolExecutor);
 
         OpenAIConfig openAIConfig = new OpenAIConfig.Builder()
                 .apiKey(settings.openAIKey)
@@ -189,7 +194,7 @@ public class BoykaAIService {
                 .model(settings.selectedModel)
                 .maxTokens(settings.maxTokens)
                 .build();
-        this.openAIClient = new OpenAIClient(openAIConfig,BASE_SYSTEM_PROMPT, toolExecutor);
+        this.openAIClient = new OpenAIClient(openAIConfig,BASE_SYSTEM_PROMPT+COT_PROMPT, toolExecutor);
     }
 
     public void updateSettings(BoykaAISettings.State newSettings) {
@@ -246,39 +251,6 @@ public class BoykaAIService {
         conversationHistory.clear();
     }
 
-    private String executeToolCall(ToolCall toolCall) {
-        try {
-            JsonObject args = gson.fromJson(toolCall.function.arguments, JsonObject.class);
-            switch (toolCall.function.name) {
-                case "create_file":
-                    return fileTools.createFile(args.get("path").getAsString(), args.get("content").getAsString());
-                case "edit_and_apply":
-                    return fileTools.editAndApply(
-                            args.get("path").getAsString(),
-                            args.get("instructions").getAsString(),
-                            args.get("project_context").getAsString(),false,3
-                    ).get();
-                case "execute_code":
-                    return fileTools.executeCode(args.get("code").getAsString());
-                case "stop_process":
-                    return fileTools.stopProcess(args.get("process_id").getAsString());
-                case "read_file":
-                    return fileTools.readFile(args.get("path").getAsString());
-                case "read_multiple_files":
-                    JsonArray pathsArray = args.getAsJsonArray("paths");
-                    List<String> paths = new ArrayList<>();
-                    pathsArray.forEach(element -> paths.add(element.getAsString()));
-                    return String.join("\n\n", fileTools.readMultipleFiles(paths));
-                case "list_files":
-                    return String.join("\n", fileTools.listFiles(args.get("path").getAsString()));
-                default:
-                    return "Unknown tool call: " + toolCall.function.name;
-            }
-        } catch (Exception e) {
-            BoykaAILogger.error("Error in tool execution", e);
-            return "An error occurred during tool execution: " + e.getMessage();
-        }
-    }
 
 //    public void runAutoMode(String initialGoal, int maxIterations) {
 //        for (int i = 0; i < maxIterations; i++) {

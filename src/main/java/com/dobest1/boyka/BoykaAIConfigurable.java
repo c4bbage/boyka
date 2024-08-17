@@ -245,9 +245,10 @@ public class BoykaAIConfigurable implements Configurable {
         enableOpenai.setSelected(state.enableOpenai);
         autoRepeatCountField.setText(String.valueOf(state.autoRepeatCount));
         if (state.selectedModel != null && !state.selectedModel.isEmpty()) {
+            DefaultComboBoxModel<String> model = (DefaultComboBoxModel<String>) openAIModelSelector.getModel();
+            model.addElement(state.selectedModel);
             openAIModelSelector.setSelectedItem(state.selectedModel);
         }
-        openAIModelSelector.setSelectedItem(state.selectedModel);
     }
 
     @Override

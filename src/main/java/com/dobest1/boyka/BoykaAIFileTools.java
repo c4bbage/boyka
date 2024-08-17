@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 // Added this import statement
-import com.dobest1.boyka.BoykaAILogger;
+
 
 public class BoykaAIFileTools {
     private final Project project;
@@ -49,23 +49,23 @@ public class BoykaAIFileTools {
         return resolvedPath.startsWith(workingDirectory);
     }
 
-    public boolean createDirectory(String path) {
+    public String createDirectory(String path) {
         Path dirPath = workingDirectory.resolve(path);
         if (!isValidPath(dirPath)) {
-            return false;
+            return "Error：尝试在不安全的路径创建文件夹";
         }
         try {
             Files.createDirectories(dirPath);
-            return true;
+            return "文件夹创建成功"+dirPath;
         } catch (IOException e) {
             // 使用日志记录错误
-            return false;
+            return "Error: 文件夹创建失败"+dirPath+e.getMessage();
         }
     }
 
     public String createFile(String path, String content) {
         if (!isPathSafe(path)) {
-            return "错误：尝试在不安全的路径创建文件";
+            return "Error：尝试在不安全的路径创建文件";
         }
         Path filePath = workingDirectory.resolve(path);
         try {

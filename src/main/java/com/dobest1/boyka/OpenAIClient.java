@@ -55,14 +55,16 @@ public class OpenAIClient {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 BoykaAILogger.warn("sendMessage Unexpected code " + response.code() + " " + response.body().string());
-                throw new IOException("Unexpected code " + response);
+                throw new IOException("Unexpected code " + response.code() + " " + response.body().string());
             }
 
             String responseBody = response.body().string();
             BoykaAILogger.info("sendMessage Response: " + responseBody);
             AIOpenAIResponse openAIResponse = gson.fromJson(responseBody, AIOpenAIResponse.class);
-
             return processOpenAIResponse(openAIResponse, availableTools);
+        } catch (Exception e) {
+            BoykaAILogger.error("Error in sendMessage", e);
+            return "Error: An error occurred during sendMessage: " + e.getMessage();
         }
     }
 
@@ -80,13 +82,16 @@ public class OpenAIClient {
             if (!response.isSuccessful()) {
                 BoykaAILogger.warn("sendMessageNoHistory Unexpected code " + response.code() + " " + response.body().string());
 
-                throw new IOException("Unexpected code " + response);
+                throw new IOException("Unexpected code " + response.code() + " " + response.body().string());
             }
             String responseBody = response.body().string();
             AIOpenAIResponse openAIResponse = gson.fromJson(responseBody, AIOpenAIResponse.class);
             BoykaAILogger.info("sendMessageNoHistory Response: " + responseBody);
 
             return openAIResponse.getFirstChoice().message.content;
+        } catch (Exception e) {
+            BoykaAILogger.error("Error in sendMessageNoHistory", e);
+            return "Error: An error occurred during sendMessageNoHistory: " + e.getMessage();
         }
     }
 
@@ -96,14 +101,17 @@ public class OpenAIClient {
         requestBody.addProperty("max_tokens", config.getMaxTokens());
 
         JsonArray messages = new JsonArray();
+        Message systemMessage = new Message("system", BASE_SYSTEM_PROMPT);
 
-        Message systemMessage = new Message("system", BASE_SYSTEM_PROMPT + "\n\nContext: " + context);
+        if (!context.isEmpty()) {
+            systemMessage = new Message("system", BASE_SYSTEM_PROMPT.replace("<content></content>", "\n\nFile Context: " + context + "\n\n"));
+        }
         messages.add(systemMessage.toJsonObject());
         for (Message message : conversationHistory) {
             messages.add(message.toJsonObject());
         }
-        conversationHistory.add(new Message("user", userMessage));
-        messages.add(new Message("user", userMessage).toJsonObject());
+        if (userMessage != null && !userMessage.isEmpty()) {
+        messages.add(new Message("user", userMessage).toJsonObject());}
         requestBody.add("messages", messages);
 
         JsonArray functionsArray = new JsonArray();
@@ -123,11 +131,16 @@ public class OpenAIClient {
         JsonArray messages = new JsonArray();
 
         Message systemMessage = new Message("system", systemPrompt);
+
+
         messages.add(systemMessage.toJsonObject());
-        messages.add(new Message("user", userMessage).toJsonObject());
+        if (userMessage != null && !userMessage.isEmpty()) {
+
+            messages.add(new Message("user", userMessage).toJsonObject());
+        }
         requestBody.add("messages", messages);
 
-        if (availableTools != null) {
+        if (availableTools != null && !availableTools.isEmpty()) {
             JsonArray functionsArray = new JsonArray();
 
             for (Tool tool : availableTools) {
@@ -143,21 +156,53 @@ public class OpenAIClient {
         StringBuilder finalResponse = new StringBuilder();
 
         if (openAIResponse.choices != null && !openAIResponse.choices.isEmpty()) {
-            Message assistantMessage = openAIResponse.choices.get(0).message;
-            if (assistantMessage.content != null && !assistantMessage.content.isEmpty()) {
-                finalResponse.append(assistantMessage.content).append("\n");
-            }
-            conversationHistory.add(new Message("assistant", assistantMessage.content, assistantMessage.tool_calls));
+            BoykaAILogger.info("OpenAi response choices size: " + openAIResponse.choices.size());
 
-            if (assistantMessage.tool_calls != null) {
-                String toolResult = executeToolCall(assistantMessage.tool_calls.get(0));
-                finalResponse.append("Tool used: ").append(assistantMessage.tool_calls.get(0).function.name)
-                        .append("\nResult: ").append(toolResult).append("\n");
+            for (Choice choice : openAIResponse.choices) {
+                if (choice.message != null && choice.message.tool_calls != null) {
+                    if (choice.message.content != null && !choice.message.content.isEmpty()) {
+                        finalResponse.append(choice.message.content).append("\n");
+                    }
+                    for (ToolCall toolCall : choice.message.tool_calls) {
+                        List<ToolCall> toolCallList = new ArrayList<>();
+                        toolCallList.add(toolCall);
+                        if (toolCall.function == null) {
+                            continue;
+                        }
 
-                conversationHistory.add(new Message("tool", toolResult));
-                String openAIResponseToTool = sendToolResultToOpenAI(assistantMessage.tool_calls.get(0).function.name, toolResult, availableTools);
-                finalResponse.append("AI response: ").append(openAIResponseToTool).append("\n");
+////                    finalResponse.append("Tool used: ").append(toolCall.function.name).append("\n");
+//                      finalResponse.append("Result: ").append(executeToolCall(toolCall)).append("\n");
+                        String toolResult = executeToolCall(toolCall);
+                        conversationHistory.add(new Message("assistant", choice.message.content, toolCallList));
+                        conversationHistory.add(new Message("tool", toolResult));
+                        String openAIResponseToTool = sendToolResultToOpenAI(toolCall.function.name, toolResult, availableTools);
+                        finalResponse.append(openAIResponseToTool).append("\n");
+                    }
+
+                }
+                if (choice.message != null && choice.message.content != null) {
+                    finalResponse.append(choice.message.content).append("\n");
+                }
+
             }
+//            Message assistantMessage = openAIResponse.choices.get(0).message;
+//            if (assistantMessage.content != null && !assistantMessage.content.isEmpty() &&assistantMessage.tool_calls == null) {
+//                finalResponse.append(assistantMessage.content).append("\n");
+//                conversationHistory.add(new Message("assistant", assistantMessage.content, assistantMessage.tool_calls));
+//                return finalResponse.toString();
+//            }
+//
+//            if (assistantMessage.tool_calls != null) {
+//                BoykaAILogger.info("Tool call detected size: "+assistantMessage.tool_calls.size());
+//                conversationHistory.add(new Message("assistant", assistantMessage.content, assistantMessage.tool_calls));
+//                String toolResult = executeToolCall(assistantMessage.tool_calls.get(0));
+////                finalResponse.append("Tool used: ").append(assistantMessage.tool_calls.get(0).function.name)
+////                        .append("\nResult: ").append(toolResult).append("\n");
+//
+//                conversationHistory.add(new Message("tool", toolResult));
+//                String openAIResponseToTool = sendToolResultToOpenAI(assistantMessage.tool_calls.get(0).function.name, toolResult, availableTools);
+//                finalResponse.append(openAIResponseToTool).append("\n");
+//            }
         }
 
         return finalResponse.toString();
@@ -165,28 +210,28 @@ public class OpenAIClient {
 
     private String executeToolCall(ToolCall functionCall) {
         if (toolExecutor == null) {
-            return "Tool execution is not available.";
+            return "Error: Tool execution is not available.";
         }
         return toolExecutor.executeToolCall(functionCall.function.name, functionCall.function.arguments);
     }
 
     private String sendToolResultToOpenAI(String functionName, String toolResult, List<Tool> availableTools) throws IOException {
-        JsonObject requestBody = new JsonObject();
-        requestBody.addProperty("model", config.getModel());
-        requestBody.addProperty("max_tokens", config.getMaxTokens());
-
-        JsonArray messages = new JsonArray();
-        for (Message message : conversationHistory) {
-            messages.add(message.toJsonObject());
-        }
-        requestBody.add("messages", messages);
-
-        JsonArray functionsArray = new JsonArray();
-        for (Tool tool : availableTools) {
-            functionsArray.add(tool.toOpenAIFormat());
-        }
-        requestBody.add("tools", functionsArray);
-
+//        JsonObject requestBody = new JsonObject();
+//        requestBody.addProperty("model", config.getModel());
+//        requestBody.addProperty("max_tokens", config.getMaxTokens());
+//        JsonArray messages = new JsonArray();
+//        messages.add(new Message("system", BASE_SYSTEM_PROMPT + "\n\nContext: " + toolResult).toJsonObject());
+//        for (Message message : conversationHistory) {
+//            messages.add(message.toJsonObject());
+//        }
+//        requestBody.add("messages", messages);
+//
+//        JsonArray functionsArray = new JsonArray();
+//        for (Tool tool : availableTools) {
+//            functionsArray.add(tool.toOpenAIFormat());
+//        }
+//        requestBody.add("tools", functionsArray);
+        JsonObject requestBody = buildRequestBody("", "", availableTools);
         Request request = new Request.Builder()
                 .url(apiUrl + "chat/completions")
                 .post(RequestBody.create(MediaType.parse("application/json"), requestBody.toString()))
@@ -196,7 +241,7 @@ public class OpenAIClient {
         BoykaAILogger.info("sendToolResultToOpenAI Request: " + requestBody);
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                BoykaAILogger.info("sendToolResultToOpenAI Response: " + response.body().string());
+                BoykaAILogger.info("sendToolResultToOpenAI no successful Response: " + response.body().string());
                 throw new IOException("Unexpected code " + response);
             }
             String responseBody = response.body().string();
@@ -209,6 +254,9 @@ public class OpenAIClient {
                 conversationHistory.add(new Message("assistant", responseText));
                 return responseText;
             }
+        } catch (Exception e) {
+            BoykaAILogger.error("Error in sendToolResultToOpenAI", e);
+            return "Error: An error occurred duringsendToolResultToOpenAI: " + e.getMessage();
         }
 
         return "No response from OpenAI";

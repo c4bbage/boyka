@@ -28,6 +28,9 @@ intellij {
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.vladsch.flexmark:flexmark-all:0.62.2")
+    implementation("org.commonmark:commonmark:0.18.1")
+
     // 如果需要执行Python代码，可能需要添加以下依赖
     // implementation("org.python:jython-standalone:2.7.2")
     // 如果需要更高级的文件操作，可能需要添加以下依赖

@@ -22,6 +22,8 @@ public class ToolExecutor {
             switch (toolName) {
                 case "create_file":
                     return fileTools.createFile(args.get("path").getAsString(), args.get("content").getAsString());
+                case "create_folder":
+                    return fileTools.createDirectory(args.get("path").getAsString());
                 case "edit_and_apply":
                     return fileTools.editAndApply(
                             args.get("path").getAsString(),
