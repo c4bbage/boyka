@@ -30,7 +30,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     private JPanel myToolWindowContent;
     private JBTabbedPane tabbedPane;
     private JBTextArea chatHistory;
-    private JBTextField inputField;
+    private JBTextArea inputField;
     private JButton sendButton;
     private ComboBox<String> modelSelector;
     private JButton refreshModelsButton;
@@ -227,7 +227,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         chatHistory.setLineWrap(true);
         JBScrollPane chatScrollPane = new JBScrollPane(chatHistory);
 
-        inputField = new JBTextField();
+        inputField = new JBTextArea();
         sendButton = new JButton("发送");
         sendButton.addActionListener(e -> sendMessage());
         continueButton = new JButton("继续");
@@ -243,6 +243,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
 
         // 创建一个包含输入框的面板，设置为两行高
         JPanel textFieldPanel = new JPanel(new BorderLayout());
+        inputField.setLineWrap(true);
+        inputField.setWrapStyleWord(true);
         inputField.setPreferredSize(new Dimension(inputField.getPreferredSize().width, inputField.getPreferredSize().height * 2));
         textFieldPanel.add(inputField, BorderLayout.CENTER);
 

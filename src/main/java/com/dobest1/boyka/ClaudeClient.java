@@ -143,25 +143,28 @@ public class ClaudeClient {
 
     private String processClaudeResponse(AIClaudeResponse claudeResponse, List<Tool> availableTools) throws IOException {
         StringBuilder finalResponse = new StringBuilder();
-
+        List<ToolResult> toolResults = new ArrayList<>();
         for (ContentBlock block : claudeResponse.content) {
             String  text ="";
             if ("text".equals(block.type)) {
                 finalResponse.append(block.text).append("\n");
             } else if ("tool_use".equals(block.type)) {
                 String toolResult = executeToolCall(block);
-                conversationHistory.add(new Message("assistant", List.of(block)));
-//                finalResponse.append("Tool used: ").append(block.name)
-//                        .append("\nResult: ").append(toolResult).append("\n");
-                conversationHistory.add(new Message("user", List.of(
-                        new ToolResult(block.id, toolResult, false)
-                )));
+//                conversationHistory.add(new Message("assistant", List.of(block)));
+////                finalResponse.append("Tool used: ").append(block.name)
+////                        .append("\nResult: ").append(toolResult).append("\n");
+//                conversationHistory.add(new Message("user", List.of(
+//                        new ToolResult(block.id, toolResult, false)
+//                )));
+                toolResults.add(new ToolResult(block.id, toolResult, false));
 
-                String claudeResponseToTool = sendToolResultToClaude(block.id, toolResult, availableTools);
-
-                finalResponse.append(claudeResponseToTool).append("\n");
             }
         }
+        conversationHistory.add(new Message("assistant", claudeResponse.content));
+        conversationHistory.add(new Message("user", toolResults));
+        String claudeResponseToTool = sendToolResultToClaude("", "", availableTools);
+
+        finalResponse.append(claudeResponseToTool).append("\n");
 
         return finalResponse.toString();
     }
@@ -210,6 +213,9 @@ public class ClaudeClient {
                 conversationHistory.add(new Message("assistant", responseText));
                 return responseText;
             }
+            // TODO: 这里还可能存在很多TOOLcall的情况，需要处理;整体的逻辑需要再次进行处理可能需要一个递归.调用关系抽象成这个
+            // 调用链 sendmessage procssClaudeResponse sendToolResultToClaude processClaudeResponse sendtoolResultToClaude
+
         } catch (Exception e) {
             BoykaAILogger.warn("sendToolResultToClaude Unexpected code " + e.getMessage());
             BoykaAILogger.error("Error in tool execution", e);
@@ -257,7 +263,7 @@ public class ClaudeClient {
         String role;
         Object content;
 
-        Message(String role, String content) {
+        Message(String role, Object content) {
             this.role = role;
             this.content = content;
         }

@@ -163,6 +163,7 @@ public class OpenAIClient {
                     if (choice.message.content != null && !choice.message.content.isEmpty()) {
                         finalResponse.append(choice.message.content).append("\n");
                     }
+                    conversationHistory.add(choice.message);
                     for (ToolCall toolCall : choice.message.tool_calls) {
                         List<ToolCall> toolCallList = new ArrayList<>();
                         toolCallList.add(toolCall);
@@ -173,10 +174,8 @@ public class OpenAIClient {
 ////                    finalResponse.append("Tool used: ").append(toolCall.function.name).append("\n");
 //                      finalResponse.append("Result: ").append(executeToolCall(toolCall)).append("\n");
                         String toolResult = executeToolCall(toolCall);
-                        conversationHistory.add(new Message("assistant", choice.message.content, toolCallList));
                         conversationHistory.add(new Message("tool", toolResult));
-                        String openAIResponseToTool = sendToolResultToOpenAI(toolCall.function.name, toolResult, availableTools);
-                        finalResponse.append(openAIResponseToTool).append("\n");
+
                     }
 
                 }
@@ -185,6 +184,8 @@ public class OpenAIClient {
                 }
 
             }
+            String openAIResponseToTool = sendToolResultToOpenAI("","", availableTools);
+            finalResponse.append(openAIResponseToTool).append("\n");
 //            Message assistantMessage = openAIResponse.choices.get(0).message;
 //            if (assistantMessage.content != null && !assistantMessage.content.isEmpty() &&assistantMessage.tool_calls == null) {
 //                finalResponse.append(assistantMessage.content).append("\n");
@@ -254,6 +255,7 @@ public class OpenAIClient {
                 conversationHistory.add(new Message("assistant", responseText));
                 return responseText;
             }
+            // TODO: 这里还可能存在很多TOOLcall的情况，需要处理;整体的逻辑需要再次进行处理可能需要一个递归
         } catch (Exception e) {
             BoykaAILogger.error("Error in sendToolResultToOpenAI", e);
             return "Error: An error occurred duringsendToolResultToOpenAI: " + e.getMessage();
@@ -299,7 +301,6 @@ public class OpenAIClient {
             this.content = content;
             this.tool_calls = tool_calls;
         }
-
         Message(String role, String content) {
             this.role = role;
             this.content = content;
