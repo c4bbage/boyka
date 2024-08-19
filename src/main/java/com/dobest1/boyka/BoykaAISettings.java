@@ -24,6 +24,8 @@ import java.util.List;
 )
 public class BoykaAISettings implements PersistentStateComponent<BoykaAISettings.State> {
     public static class State {
+        public String projectBasePath = "";
+        public String projectContexts="";
         /**
          * OpenAI 的服务地址
          */

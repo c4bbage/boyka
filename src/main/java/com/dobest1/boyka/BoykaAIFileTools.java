@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -28,6 +29,7 @@ public class BoykaAIFileTools {
     private final Project project;
     private final Path workingDirectory;
     private final Gson gson = new Gson();
+    private ContextManager contextManager = null;
     private final Map<String, String> fileContents = new HashMap<>();
     private final Set<String> codeEditorFiles = new HashSet<>();
     private final List<String> codeEditorMemory = new ArrayList<>();
@@ -37,11 +39,13 @@ public class BoykaAIFileTools {
         this.project = project;
         codeEditorTokens.put("input", 0);
         codeEditorTokens.put("output", 0);
-        this.workingDirectory = Paths.get(project.getBasePath());
+        this.contextManager = ContextManager.getInstance(project);
+
+        this.workingDirectory = Paths.get(Objects.requireNonNull(project.getBasePath()));
     }
 
     private boolean isValidPath(Path path) {
-        return path.startsWith(workingDirectory) && !path.toFile().isHidden();
+        return !path.startsWith(workingDirectory) || path.toFile().isHidden();
     }
 
     private boolean isPathSafe(String path) {
@@ -51,11 +55,12 @@ public class BoykaAIFileTools {
 
     public String createDirectory(String path) {
         Path dirPath = workingDirectory.resolve(path);
-        if (!isValidPath(dirPath)) {
+        if (isValidPath(dirPath)) {
             return "Error：尝试在不安全的路径创建文件夹";
         }
         try {
             Files.createDirectories(dirPath);
+            VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
             return "文件夹创建成功"+dirPath;
         } catch (IOException e) {
             // 使用日志记录错误
@@ -71,29 +76,33 @@ public class BoykaAIFileTools {
         try {
             Files.createDirectories(filePath.getParent());
             Files.write(filePath, content.getBytes());
+            contextManager.updateFileContent(String.valueOf(filePath), content);
+            VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
             return "文件创建成功";
         } catch (IOException e) {
             return "文件创建失败：" + e.getMessage();
         }
     }
 
-    public boolean writeFile(String path, String content) {
+    public String writeFile(String path, String content) {
         Path filePath = workingDirectory.resolve(path);
-        if (!isValidPath(filePath)) {
-            return false;
+        if (isValidPath(filePath)) {
+            return "Error: 无效的路径"+filePath;
         }
         try {
             Files.write(filePath, content.getBytes());
-            return true;
+            contextManager.updateFileContent(String.valueOf(filePath),content);
+            VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
+            return "文件写入成功";
         } catch (IOException e) {
             // 使用日志记录错误
-            return false;
+            return "Error: 文件写入失败"+e.getMessage();
         }
     }
 
     public boolean deleteFileOrDirectory(String path) {
         Path dirPath = workingDirectory.resolve(path);
-        if (!isValidPath(dirPath)) {
+        if (isValidPath(dirPath)) {
             return false;
         }
         try {
@@ -113,7 +122,7 @@ public class BoykaAIFileTools {
         }
     }
 
-    public boolean modifyFile(String path, String newContent) {
+    public String modifyFile(String path, String newContent) {
         return writeFile(path, newContent);
     }
 
@@ -126,7 +135,7 @@ public class BoykaAIFileTools {
             dirPath = workingDirectory.resolve(path);
         }
 
-        if (!isValidPath(dirPath)) {
+        if (isValidPath(dirPath)) {
             return Collections.singletonList("Error: 无效的路径"+dirPath+workingDirectory);
         }
         try {
@@ -138,17 +147,20 @@ public class BoykaAIFileTools {
         }
     }
 
-    public String readFile(String path) {
+    public String readFile (String path) {
         Path filePath = workingDirectory.resolve(path);
-        if (!isValidPath(filePath)) {
+        if (isValidPath(filePath)) {
             BoykaAILogger.warn("Error: 读取文件失败"+filePath);
             return "Error: 无效的路径"+filePath;
         }
         try {
-            return new String(Files.readAllBytes(filePath));
+
+            String content= new String(Files.readAllBytes(filePath));
+            contextManager.updateFileContent(path, content);
+            return content;
         } catch (IOException e) {
             // 使用日志记录错误
-            BoykaAILogger.error("Error: 读取文件失败"+path, e);
+            BoykaAILogger.error("Error: readFile 读取文件失败"+path, e);
             return "Error: 读取文件失败"+path;
         }
     }
@@ -161,7 +173,7 @@ public class BoykaAIFileTools {
 
     public List<String> readFilesInDirectory(String directoryPath) {
         Path dirPath = workingDirectory.resolve(directoryPath);
-        if (!isValidPath(dirPath)) {
+        if (isValidPath(dirPath)) {
             return new ArrayList<>();
         }
         try {

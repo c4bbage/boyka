@@ -5,6 +5,9 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
+
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import java.util.ArrayList;
@@ -39,6 +42,7 @@ public class ContextManager {
             BoykaAILogger.info("File added to context: " + filePath);
             notifyContextChanged();
         }
+        saveContext();
     }
 
     public boolean isFileInContext(String filePath) {
@@ -73,9 +77,15 @@ public class ContextManager {
 
     public void removeFileFromContext(String filePath) {
         contextFiles.remove(filePath);
+        saveContext();
     }
 
-
+    public void saveContext() {
+        String context = getFullContext();
+        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+        assert settings != null;
+        settings.projectContexts=getFullContext();
+    }
     public List<String> searchProjectFiles(String query) {
         List<String> results = new ArrayList<>();
         VirtualFile projectDir = project.getBaseDir();
@@ -102,10 +112,12 @@ public class ContextManager {
                 return file.getPath();
             }
         }
+        saveContext();
         return null;
     }
     public void updateFileContent(String filePath, String content) {
         fileContents.put(filePath, content);
+        saveContext();
     }
 
     public String getFileContent(String filePath) {
@@ -117,8 +129,25 @@ public class ContextManager {
         StringBuilder context = new StringBuilder();
         for (String filePath : contextFiles) {
             context.append("File: ").append(filePath).append("\n");
-            context.append(fileContents.get(filePath)).append("\n\n");
+            String content = fileContents.get(filePath);
+            if (content == null) {
+                // 如果内容不在缓存中，尝试重新读取文件
+                content = readFileContent(filePath);
+                if (content != null) {
+                    fileContents.put(filePath, content);
+                }
+            }
+            context.append(content != null ? content : "File content not available").append("\n\n");
         }
         return context.toString();
+    }
+
+    private String readFileContent(String filePath) {
+        try {
+            return new String(Files.readAllBytes(Paths.get(filePath)));
+        } catch (IOException e) {
+            BoykaAILogger.error("Error reading file: " + filePath, e);
+            return null;
+        }
     }
 }

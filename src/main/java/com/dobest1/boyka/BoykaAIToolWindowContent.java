@@ -62,8 +62,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             // Chat tab
             JPanel chatPanel = createChatPanel();
             tabbedPane.addTab("聊天", chatPanel);
-            JPanel chatPanelmk = new EnhancedChatPanel(project);
-            tabbedPane.addTab("聊天mk", chatPanelmk);
+//            JPanel chatPanelmk = new EnhancedChatPanel(project);
+//            tabbedPane.addTab("聊天mk", chatPanelmk);
 
             // Context tab
             JPanel contextPanel = createContextPanel(project);
@@ -237,9 +237,15 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         autoButton = new JButton("自动");
         autoButton.addActionListener(e -> startAutoRepeat());
         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
+        assert settings != null;
+        settings.projectBasePath=project.getBasePath();
         modelSelector = new ComboBox<>(new String[]{settings.selectedModel != null ? settings.selectedModel : "gpt-3.5-turbo"});
         modelSelector.addActionListener(e -> updateChatTabTitle());
         JPanel inputPanel = new JPanel(new BorderLayout());
+        inputField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createEmptyBorder(5, 5, 5, 5)
+        ));
 
         // 创建一个包含输入框的面板，设置为两行高
         JPanel textFieldPanel = new JPanel(new BorderLayout());
@@ -448,6 +454,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
                         inputField.setEnabled(false);
                         String aiResponse = aiService.getAIResponse(message, context);
+
                         inputField.setEnabled(true);
                         fileTools.refreshFileSystem(project.getProjectFilePath());
                         SwingUtilities.invokeLater(() -> {
@@ -455,18 +462,18 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                                 chatHistory.append("AI: 抱歉，发生了一个错误。\n");
                                 chatHistory.append(aiResponse + "\n");
                                 Messages.showErrorDialog(project, aiResponse, "AI响应错误");
-                            } else if (aiResponse.isEmpty()) {
+                            } else if (aiResponse.isEmpty() || aiResponse.isBlank()) {
                                 chatHistory.append("AI: 抱歉，点击继续\n");
                             } else {
                                 chatHistory.append("AI: " + aiResponse + "\n");
+                                VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
+                                inputField.setText("");
+                                scrollToBottom(); // 滚动到底部
+                                if (remainingAutoRepeatCount > 0) {
+                                    sendAutoContinueMessage(message);
+                                }
                             }
-                            VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
-                            inputField.setText("");
-                            scrollToBottom(); // 滚动到底部
                             updateChatTabTitle();
-                            if (remainingAutoRepeatCount > 0) {
-                                sendAutoContinueMessage(message);
-                            }
                         });
                     }
                 });
@@ -559,7 +566,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     }
 
     private void clearConversation() {
-        aiService.clearConversationHistory();
+        aiService.clearAllConversationHistories();
         chatHistory.setText("");
     }
 

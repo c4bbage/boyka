@@ -203,14 +203,15 @@ public class BoykaAIService {
     }
 
     public String getAIResponse(String userMessage, String context) {
+        String latestContext = contextManager.getFullContext();
 
         StringBuilder finalResponse = new StringBuilder();
         try {
             String response;
             if (settings.enableClaude) {
-                response = claudeClient.sendMessage(userMessage, context,availableTools);
+                response = claudeClient.sendMessage(userMessage, latestContext,availableTools);
             } else if (settings.enableOpenai) {
-                response = openAIClient.sendMessage(userMessage, context,availableTools);
+                response = openAIClient.sendMessage(userMessage, latestContext,availableTools);
             } else {
                 return "Error: No AI service enabled. Please enable either Claude or OpenAI in settings.";
             }
@@ -231,26 +232,14 @@ public class BoykaAIService {
         }
     }
 
-    private void updateContextIfNeeded(ToolCall toolCall, String toolResult) {
-        if (toolCall.function.name.equals("read_file") || toolCall.function.name.equals("create_file")) {
-            JsonObject args = gson.fromJson(toolCall.function.arguments, JsonObject.class);
-            String filePath = args.get("path").getAsString();
-            contextManager.updateFileContent(filePath, toolResult);
+    public void clearAllConversationHistories() {
+        if (claudeClient != null) {
+            claudeClient.clearConversationHistory();
+        }
+        if (openAIClient != null) {
+            openAIClient.clearConversationHistory();
         }
     }
-    private String getConversationHistoryString() {
-        StringBuilder history = new StringBuilder();
-        for (Message message : conversationHistory) {
-            history.append(message.role).append(": ").append(message.content).append("\n\n");
-        }
-        return history.toString();
-    }
-
-
-    public void clearConversationHistory() {
-        conversationHistory.clear();
-    }
-
 
 //    public void runAutoMode(String initialGoal, int maxIterations) {
 //        for (int i = 0; i < maxIterations; i++) {

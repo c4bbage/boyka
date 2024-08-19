@@ -47,8 +47,8 @@ public class ToolExecutor {
                     return "Unknown tool call: " + toolName;
             }
         } catch (Exception e) {
-            BoykaAILogger.error("Error in tool execution", e);
-            return "An error occurred during tool execution: " + e.getMessage();
+            BoykaAILogger.error("Error in tool execution: "+toolName+arguments, e);
+            return "An error occurred during <+"+toolName+">+tool execution:  "+ arguments+ "\nError msg: "+ e.getMessage();
         }
     }
 }
