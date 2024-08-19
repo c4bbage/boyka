@@ -44,8 +44,8 @@ public class OpenAIClient {
         this(config, systemPrompt, null);
     }
 
-    public String sendMessage(String userMessage, String context, List<Tool> availableTools) throws IOException {
-        JsonObject requestBody = buildRequestBody(userMessage, context, availableTools);
+    public String sendMessage(String userMessage,  List<Tool> availableTools) throws IOException {
+        JsonObject requestBody = buildRequestBody(userMessage, availableTools);
         AIOpenAIResponse openAIResponse = sendRequest(requestBody);
         return processOpenAIResponse(openAIResponse, availableTools, 0);
     }
@@ -56,7 +56,7 @@ public class OpenAIClient {
         return processOpenAIResponse(openAIResponse, availableTools, 0);
     }
 
-    private JsonObject buildRequestBody(String userMessage, String context, List<Tool> availableTools) {
+    private JsonObject buildRequestBody(String userMessage, List<Tool> availableTools) {
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", config.getModel());
         requestBody.addProperty("max_tokens", config.getMaxTokens());
@@ -67,10 +67,8 @@ public class OpenAIClient {
 
         assert Settings != null;
         String latestContext = Settings.projectContexts;
+        systemMessage = new Message("system", BASE_SYSTEM_PROMPT.replace("<content></content>", "\n\nFile Context: " + latestContext + "\n\n"));
 
-        if (!context.isEmpty()) {
-            systemMessage = new Message("system", BASE_SYSTEM_PROMPT.replace("<content></content>", "\n\nFile Context: " + latestContext + "\n\n"));
-        }
         messages.add(systemMessage.toJsonObject());
         for (Message message : conversationHistory) {
             messages.add(message.toJsonObject());
@@ -210,7 +208,7 @@ public class OpenAIClient {
     }
 
     private String sendToolResultToOpenAI(List<Tool> availableTools, int depth) throws IOException {
-        JsonObject requestBody = buildRequestBody("", "", availableTools);
+        JsonObject requestBody = buildRequestBody("", availableTools);
         AIOpenAIResponse openAIResponse = sendRequest(requestBody);
         return processOpenAIResponse(openAIResponse, availableTools, depth);
     }

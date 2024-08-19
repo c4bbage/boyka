@@ -202,26 +202,19 @@ public class BoykaAIService {
         initializeAIClients();
     }
 
-    public String getAIResponse(String userMessage, String context) {
-        String latestContext = contextManager.getFullContext();
+    public String getAIResponse(String userMessage) {
 
         StringBuilder finalResponse = new StringBuilder();
         try {
             String response;
             if (settings.enableClaude) {
-                response = claudeClient.sendMessage(userMessage, latestContext,availableTools);
+                response = claudeClient.sendMessage(userMessage,availableTools);
             } else if (settings.enableOpenai) {
-                response = openAIClient.sendMessage(userMessage, latestContext,availableTools);
+                response = openAIClient.sendMessage(userMessage,availableTools);
             } else {
                 return "Error: No AI service enabled. Please enable either Claude or OpenAI in settings.";
             }
             finalResponse.append(response);
-
-//            String analysisPrompt = "Analyze the following conversation and tool results, then provide a comprehensive response:\n\n" + getConversationHistoryString();
-//            String analysisResult = settings.enableClaude ?
-//                    getClaudeAnalysis(analysisPrompt) : getOpenAIAnalysis(analysisPrompt);
-//            finalResponse.append("\n\nAnalysis of conversation and tool results:\n").append(analysisResult);
-
             return finalResponse.toString();
         } catch (IOException e) {
             BoykaAILogger.error("Error during API call", e);

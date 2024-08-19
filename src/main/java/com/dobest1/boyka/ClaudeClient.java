@@ -8,7 +8,9 @@ import okhttp3.*;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 public class ClaudeClient {
@@ -21,7 +23,7 @@ public class ClaudeClient {
     private final ClaudeConfig config;
     private final ToolExecutor toolExecutor;
     private static final int MAX_RETRIES = 3;
-    private static final int MAX_RECURSION_DEPTH = 10;
+    private static final int MAX_RECURSION_DEPTH = 20;
     public void clearConversationHistory() {
         this.conversationHistory.clear();
     }
@@ -45,19 +47,31 @@ public class ClaudeClient {
         this(config, prompt, null);
     }
 
-    public String sendMessage(String userMessage, String context, List<Tool> availableTools) throws IOException {
-        JsonObject requestBody = buildRequestBody(userMessage, context, availableTools);
+    public String sendMessage(String userMessage,List<Tool> availableTools) throws IOException {
+        JsonObject requestBody = buildRequestBody(userMessage, availableTools);
         AIClaudeResponse claudeResponse = sendRequest(requestBody);
         return processClaudeResponse(claudeResponse, availableTools, 0);
     }
 
     public String sendMessageNoHistory(String systemPrompt, String userMessage, String context, List<Tool> availableTools) throws IOException {
-        JsonObject requestBody = buildRequestBody(systemPrompt, userMessage, context, availableTools);
+        JsonObject requestBody = buildRequestBody(systemPrompt, List.of(new Message[]{new Message("user", userMessage)}),  context, availableTools);
         AIClaudeResponse claudeResponse = sendRequest(requestBody);
+        // If max tokens reached, try again with a shorter message
+        if (Objects.equals(claudeResponse.stop_reason, "max_tokens")) {
+            String finalmessage=claudeResponse.content.get(0).text;
+            BoykaAILogger.info("Max tokens reached. Please try again with a shorter message.");
+            List<Message> messages = new ArrayList<>();
+            messages.add(new Message("user", userMessage));
+            messages.add(new Message("assistant", claudeResponse.content));
+            messages.add(new Message("user", "Max tokens reached. Please continue"));
+            requestBody=buildRequestBody(systemPrompt, messages, context, Collections.emptyList());
+            finalmessage+=sendRequest(requestBody).content.get(0).text.replace("<REPLACE>\\n", "");
+            return finalmessage;
+        }
         return processClaudeResponse(claudeResponse, availableTools, 0);
     }
 
-    private JsonObject buildRequestBody(String userMessage, String context, List<Tool> availableTools) {
+    private JsonObject buildRequestBody(String userMessage, List<Tool> availableTools) {
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", config.getModel());
         requestBody.addProperty("max_tokens", config.getMaxTokens());
@@ -67,9 +81,8 @@ public class ClaudeClient {
         assert Settings != null;
         String latestContext = Settings.projectContexts;
         String systemPrompt = BASE_SYSTEM_PROMPT;
-        if (!context.isEmpty()) {
-            systemPrompt = BASE_SYSTEM_PROMPT.replace("<content></content>", "\n\nFile Context: " + latestContext + "\n\n");
-        }
+        systemPrompt = systemPrompt.replace("<content></content>", "\n\nFile Context: " + latestContext + "\n\n");
+
         requestBody.addProperty("system", systemPrompt);
 
         JsonArray messages = new JsonArray();
@@ -93,7 +106,7 @@ public class ClaudeClient {
         return requestBody;
     }
 
-    private JsonObject buildRequestBody(String systemPrompt, String userMessage, String context, List<Tool> availableTools) {
+    private JsonObject buildRequestBody(String systemPrompt, List<Message> userMessage, String context, List<Tool> availableTools) {
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", config.getModel());
         requestBody.addProperty("max_tokens", config.getMaxTokens());
@@ -101,7 +114,9 @@ public class ClaudeClient {
 
         JsonArray messages = new JsonArray();
         if (userMessage != null && !userMessage.isEmpty()) {
-            messages.add(new Message("user", userMessage).toJsonObject());
+            for (Message message : userMessage) {
+                messages.add(message.toJsonObject());
+            }
         }
         requestBody.add("messages", messages);
 
@@ -198,7 +213,7 @@ public class ClaudeClient {
     }
 
     private String sendToolResultToClaude(List<Tool> availableTools, int depth) throws IOException {
-        JsonObject requestBody = buildRequestBody("", "", availableTools);
+        JsonObject requestBody = buildRequestBody("", availableTools);
         AIClaudeResponse claudeResponse = sendRequest(requestBody);
         return processClaudeResponse(claudeResponse, availableTools, depth);
     }

@@ -450,10 +450,9 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                     @Override
                     public void run(@NotNull ProgressIndicator indicator) {
                         indicator.setIndeterminate(true);
-                        String context = getContext();
                         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
                         inputField.setEnabled(false);
-                        String aiResponse = aiService.getAIResponse(message, context);
+                        String aiResponse = aiService.getAIResponse(message);
 
                         inputField.setEnabled(true);
                         fileTools.refreshFileSystem(project.getProjectFilePath());

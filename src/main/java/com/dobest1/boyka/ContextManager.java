@@ -81,10 +81,10 @@ public class ContextManager {
     }
 
     public void saveContext() {
-        String context = getFullContext();
         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
         assert settings != null;
         settings.projectContexts=getFullContext();
+        BoykaAILogger.info("Context saved: " + settings.projectContexts);
     }
     public List<String> searchProjectFiles(String query) {
         List<String> results = new ArrayList<>();
@@ -117,6 +117,7 @@ public class ContextManager {
     }
     public void updateFileContent(String filePath, String content) {
         fileContents.put(filePath, content);
+        BoykaAILogger.info("File content updated: " + filePath);
         saveContext();
     }
 
