@@ -2,6 +2,7 @@ package com.dobest1.boyka;
 
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -19,20 +20,20 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ContextManager {
-    private final Project project;
+    private final BoykaAISettings settings;
     private final List<String> contextFiles;
     private final List<ContextChangeListener> listeners;
     private final ConcurrentHashMap<String, String> fileContents;
 
-    public static ContextManager getInstance(Project project) {
-        return ServiceManager.getService(project, ContextManager.class);
+    public static ContextManager getInstance() {
+        return ServiceManager.getService(ContextManager.class);
     }
 
-    public ContextManager(Project project) {
-        this.project = project;
+    public ContextManager( ) {
         this.contextFiles = new CopyOnWriteArrayList<>();
         this.listeners = new ArrayList<>();
         this.fileContents = new ConcurrentHashMap<>();
+        this.settings = BoykaAISettings.getInstance();
 
     }
 
@@ -88,7 +89,10 @@ public class ContextManager {
     }
     public List<String> searchProjectFiles(String query) {
         List<String> results = new ArrayList<>();
-        VirtualFile projectDir = project.getBaseDir();
+        VirtualFile projectDir = ProjectManager.getInstance().getOpenProjects()[0].getBaseDir();
+        if (projectDir == null) {
+            return results;
+        }
         searchFiles(projectDir, query, results);
         return results;
     }

@@ -57,21 +57,21 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             this.project = project;  // Initialize project field
             myToolWindowContent = new JPanel(new BorderLayout());
             tabbedPane = new JBTabbedPane();
-            this.contextManager = ContextManager.getInstance(project);
+            this.contextManager = ContextManager.getInstance();
             this.contextManager.addContextChangeListener(this);
             // Chat tab
             JPanel chatPanel = createChatPanel();
-            tabbedPane.addTab("聊天", chatPanel);
+            tabbedPane.addTab("Chat", chatPanel);
 //            JPanel chatPanelmk = new EnhancedChatPanel(project);
 //            tabbedPane.addTab("聊天mk", chatPanelmk);
 
             // Context tab
             JPanel contextPanel = createContextPanel(project);
-            tabbedPane.addTab("上下文", contextPanel);
+            tabbedPane.addTab("Context", contextPanel);
 
             // Settings tab
             JPanel settingsPanel = createSettingsPanel();
-            tabbedPane.addTab("设置", settingsPanel);
+            tabbedPane.addTab("Settings", settingsPanel);
 
             myToolWindowContent.add(tabbedPane, BorderLayout.CENTER);
             fileTools = new BoykaAIFileTools(project);
@@ -228,13 +228,13 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         JBScrollPane chatScrollPane = new JBScrollPane(chatHistory);
 
         inputField = new JBTextArea();
-        sendButton = new JButton("发送");
+        sendButton = new JButton("Send");
         sendButton.addActionListener(e -> sendMessage());
-        continueButton = new JButton("继续");
+        continueButton = new JButton("Continue");
         continueButton.addActionListener(e -> sendContinueMessage());
-        clearButton = new JButton("清空");
+        clearButton = new JButton("Clear");
         clearButton.addActionListener(e -> clearConversation());
-        autoButton = new JButton("自动");
+        autoButton = new JButton("Auto");
         autoButton.addActionListener(e -> startAutoRepeat());
         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
         assert settings != null;
@@ -287,8 +287,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
 
     private void sendAutoContinueMessage(String continueText) {
         if (remainingAutoRepeatCount > 0) {
-            if (inputField.getText().equals("继续") || inputField.getText().isEmpty()) {
-                inputField.setText("继续");
+            if (inputField.getText().equals("Continue") || inputField.getText().isEmpty()) {
+                inputField.setText("Continue");
             }
             sendMessage();
             inputField.setText(continueText);
@@ -301,12 +301,12 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         if (settings.enableOpenai) {
             String selectedModel = (String) modelSelector.getSelectedItem();
             if (selectedModel == null) {
-                tabbedPane.setTitleAt(0, "聊天");
+                tabbedPane.setTitleAt(0, "Chat");
                 return;
             }
-            tabbedPane.setTitleAt(0, "聊天 - " + selectedModel);
+            tabbedPane.setTitleAt(0, "Chat - " + selectedModel);
         } else {
-            tabbedPane.setTitleAt(0, "聊天 - " + "Claude-3.5-sonnet");
+            tabbedPane.setTitleAt(0, "Chat - " + "Claude-3.5-sonnet");
         }
     }
 
@@ -319,8 +319,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
 
         JPanel controlPanel = new JPanel(new BorderLayout());
         contextSearchField = new JBTextField();
-        JButton addFileButton = new JButton("添加文件");
-        JButton removeFileButton = new JButton("移除文件");
+        JButton addFileButton = new JButton("Add File");
+        JButton removeFileButton = new JButton("Remove File");
 
         controlPanel.add(contextSearchField, BorderLayout.CENTER);
         controlPanel.add(addFileButton, BorderLayout.EAST);
@@ -348,8 +348,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                 if (!results.isEmpty()) {
                     String selectedFile = (String) JOptionPane.showInputDialog(
                             contextPanel,
-                            "选择文件",
-                            "添加到上下文",
+                            "Select a file to add to context",
+                            "Add File to Context",
                             JOptionPane.PLAIN_MESSAGE,
                             null,
                             results.toArray(),
@@ -399,7 +399,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
 
             // 创建一个面板来容纳保存按钮
             JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-            JButton saveButton = new JButton("保存设置");
+            JButton saveButton = new JButton("Save");
             saveButton.addActionListener(e -> saveSettings(configurable));
             buttonPanel.add(saveButton);
 
@@ -421,9 +421,9 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             aiService.updateSettings(settings);
             modelSelector.setSelectedItem(settings.selectedModel);
             updateChatTabTitle();
-            JOptionPane.showMessageDialog(myToolWindowContent, "设置已保存", "保存成功", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(myToolWindowContent, "Settings saved", "Success", JOptionPane.INFORMATION_MESSAGE);
         } catch (ConfigurationException e) {
-            JOptionPane.showMessageDialog(myToolWindowContent, "保存设置失败: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(myToolWindowContent, "Settings save failed: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -440,17 +440,16 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             chatHistory.append("你: " + message + "\n");
             try {
                 BoykaAISettings.@Nullable State settings = BoykaAISettings.getInstance().getState();
-                String title = "正在获取AI响应";
+                String title = "Waiting for AI response";
                 if (remainingAutoRepeatCount != 0) {
                     int c = settings.autoRepeatCount - remainingAutoRepeatCount+1;
-                    title = "正在获取AI响应(第" + c + "次)";
+                    title = "Waiting for AI response (" + c + "/" + settings.autoRepeatCount + ")";
                 }
 
                 ProgressManager.getInstance().run(new Task.Backgroundable(project, title) {
                     @Override
                     public void run(@NotNull ProgressIndicator indicator) {
                         indicator.setIndeterminate(true);
-                        BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
                         inputField.setEnabled(false);
                         String aiResponse = aiService.getAIResponse(message);
 
@@ -458,11 +457,11 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                         fileTools.refreshFileSystem(project.getProjectFilePath());
                         SwingUtilities.invokeLater(() -> {
                             if (aiResponse.startsWith("Error:")) {
-                                chatHistory.append("AI: 抱歉，发生了一个错误。\n");
+                                chatHistory.append("AI: " + aiResponse + "\n");
                                 chatHistory.append(aiResponse + "\n");
-                                Messages.showErrorDialog(project, aiResponse, "AI响应错误");
+                                Messages.showErrorDialog(project, aiResponse, "Boyka AI Error");
                             } else if (aiResponse.isEmpty() || aiResponse.isBlank()) {
-                                chatHistory.append("AI: 抱歉，点击继续\n");
+                                chatHistory.append("AI: " + "No response from AI.Please try again.\n");
                             } else {
                                 chatHistory.append("AI: " + aiResponse + "\n");
                                 VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
@@ -498,7 +497,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     }
 
     private void refreshModels() {
-        ProgressManager.getInstance().run(new Task.Backgroundable(project, "正在刷新模型列表") {
+        ProgressManager.getInstance().run(new Task.Backgroundable(project, "Fetching models") {
             @Override
             public void run(@NotNull ProgressIndicator indicator) {
                 List<String> models = fetchAvailableModels();
@@ -538,8 +537,8 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
 
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
-                BoykaAILogger.warn("无法获取模型列表: " + response.code() + " " + response.message());
-                showErrorDialog("无法获取模型列表: " + response.message());
+                BoykaAILogger.warn("Failed to fetch models: " + response.code() + " " + response.message());
+                showErrorDialog("Failed to fetch models: " + response.message());
                 return modelList; // 返回空列表
             }
 
@@ -552,7 +551,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                 modelList.add(model.get("id").getAsString()); // 提取模型 ID
             }
         } catch (IOException e) {
-            showErrorDialog("请求失败: " + e.getMessage());
+            showErrorDialog("Failed to fetch models: " + e.getMessage());
         }
 
         return modelList; // 返回模型列表

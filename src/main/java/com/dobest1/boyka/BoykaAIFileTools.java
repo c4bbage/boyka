@@ -39,7 +39,7 @@ public class BoykaAIFileTools {
         this.project = project;
         codeEditorTokens.put("input", 0);
         codeEditorTokens.put("output", 0);
-        this.contextManager = ContextManager.getInstance(project);
+        this.contextManager = ContextManager.getInstance();
 
         this.workingDirectory = Paths.get(Objects.requireNonNull(project.getBasePath()));
     }

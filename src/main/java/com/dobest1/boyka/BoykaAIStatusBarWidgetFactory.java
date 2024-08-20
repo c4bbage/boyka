@@ -26,6 +26,6 @@ public class BoykaAIStatusBarWidgetFactory implements StatusBarWidgetFactory {
     @NotNull
     @Override
     public String getDisplayName() {
-        return "Boyka AI 助手";
+        return "Boyka AI Assistant";
     }
 }
