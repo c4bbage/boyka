@@ -57,7 +57,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
             this.project = project;  // Initialize project field
             myToolWindowContent = new JPanel(new BorderLayout());
             tabbedPane = new JBTabbedPane();
-            this.contextManager = ContextManager.getInstance();
+            this.contextManager = ContextManager.getInstance(project);
             this.contextManager.addContextChangeListener(this);
             // Chat tab
             JPanel chatPanel = createChatPanel();
@@ -107,7 +107,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         createFolderProperties.add("path", pathProperty);
         tools.add(new Tool("create_folder",
                 "在指定的路径上创建一个新文件夹。当您需要在项目结构中创建新目录时，应使用此工具。如果父目录不存在，它将创建所有必需的父目录。如果文件夹已创建或已经存在，该工具将返回成功消息，如果创建文件夹有问题，则返回错误消息。"
-                        ,
+                ,
                 createFileProperties,
                 new String[]{"path"}));
 
@@ -238,7 +238,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         autoButton.addActionListener(e -> startAutoRepeat());
         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
         assert settings != null;
-        settings.projectBasePath=project.getBasePath();
+        settings.projectBasePath = project.getBasePath();
         modelSelector = new ComboBox<>(new String[]{settings.selectedModel != null ? settings.selectedModel : "gpt-3.5-turbo"});
         modelSelector.addActionListener(e -> updateChatTabTitle());
         JPanel inputPanel = new JPanel(new BorderLayout());
@@ -442,7 +442,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                 BoykaAISettings.@Nullable State settings = BoykaAISettings.getInstance().getState();
                 String title = "Waiting for AI response";
                 if (remainingAutoRepeatCount != 0) {
-                    int c = settings.autoRepeatCount - remainingAutoRepeatCount+1;
+                    int c = settings.autoRepeatCount - remainingAutoRepeatCount + 1;
                     title = "Waiting for AI response (" + c + "/" + settings.autoRepeatCount + ")";
                 }
 

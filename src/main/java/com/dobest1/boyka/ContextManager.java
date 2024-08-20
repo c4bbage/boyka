@@ -3,33 +3,33 @@ package com.dobest1.boyka;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
-import com.intellij.openapi.vfs.VirtualFile;
-import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VirtualFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ContextManager {
     private final BoykaAISettings settings;
     private final List<String> contextFiles;
     private final List<ContextChangeListener> listeners;
     private final ConcurrentHashMap<String, String> fileContents;
-
-    public static ContextManager getInstance() {
+    private final Project project;
+    private String cachedContext;
+    private long lastUpdateTime;
+    private static final long CACHE_VALIDITY_PERIOD = 5000; // 5 seconds
+    public static ContextManager getInstance(Project project) {
         return ServiceManager.getService(ContextManager.class);
     }
 
-    public ContextManager( ) {
+    public ContextManager(Project project) {
+        this.project = project;
         this.contextFiles = new CopyOnWriteArrayList<>();
         this.listeners = new ArrayList<>();
         this.fileContents = new ConcurrentHashMap<>();
@@ -84,9 +84,10 @@ public class ContextManager {
     public void saveContext() {
         BoykaAISettings.State settings = BoykaAISettings.getInstance().getState();
         assert settings != null;
-        settings.projectContexts=getFullContext();
+        settings.projectContexts = getFullContext();
         BoykaAILogger.info("Context saved: " + settings.projectContexts);
     }
+
     public List<String> searchProjectFiles(String query) {
         List<String> results = new ArrayList<>();
         VirtualFile projectDir = ProjectManager.getInstance().getOpenProjects()[0].getBaseDir();
@@ -119,10 +120,11 @@ public class ContextManager {
         saveContext();
         return null;
     }
+
+    // 在任何更新上下文的方法中调用 invalidateCache()
     public void updateFileContent(String filePath, String content) {
         fileContents.put(filePath, content);
-        BoykaAILogger.info("File content updated: " + filePath);
-        saveContext();
+        invalidateCache();
     }
 
     public String getFileContent(String filePath) {
@@ -130,22 +132,31 @@ public class ContextManager {
     }
 
 
-    public String getFullContext() {
-        StringBuilder context = new StringBuilder();
-        for (String filePath : contextFiles) {
-            context.append("File: ").append(filePath).append("\n");
-            String content = fileContents.get(filePath);
-            if (content == null) {
-                // 如果内容不在缓存中，尝试重新读取文件
-                content = readFileContent(filePath);
-                if (content != null) {
-                    fileContents.put(filePath, content);
+    public synchronized String getFullContext() {
+        long currentTime = System.currentTimeMillis();
+        if (cachedContext == null || (currentTime - lastUpdateTime) > CACHE_VALIDITY_PERIOD) {
+            StringBuilder context = new StringBuilder();
+            for (String filePath : contextFiles) {
+                context.append("File: ").append(filePath).append("\n");
+                String content = fileContents.get(filePath);
+                if (content == null) {
+                    content = readFileContent(filePath);
+                    if (content != null) {
+                        fileContents.put(filePath, content);
+                    }
                 }
+                context.append(content != null ? content : "File content not available").append("\n\n");
             }
-            context.append(content != null ? content : "File content not available").append("\n\n");
+            cachedContext = context.toString();
+            lastUpdateTime = currentTime;
         }
-        return context.toString();
+        return cachedContext;
     }
+
+    public synchronized void invalidateCache() {
+        cachedContext = null;
+    }
+
 
     private String readFileContent(String filePath) {
         try {

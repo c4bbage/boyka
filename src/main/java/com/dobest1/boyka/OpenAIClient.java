@@ -21,9 +21,11 @@ public class OpenAIClient {
     private final ToolExecutor toolExecutor;
     private static final int MAX_RETRIES = 3;
     private static final int MAX_RECURSION_DEPTH = 20;
+
     public void clearConversationHistory() {
         this.conversationHistory.clear();
     }
+
     public OpenAIClient(OpenAIConfig config, String prompt, ToolExecutor toolExecutor) {
         this.config = config;
         this.apiKey = config.getApiKey();
@@ -44,7 +46,7 @@ public class OpenAIClient {
         this(config, systemPrompt, null);
     }
 
-    public String sendMessage(String userMessage,  List<Tool> availableTools) throws IOException {
+    public String sendMessage(String userMessage, List<Tool> availableTools) throws IOException {
         JsonObject requestBody = buildRequestBody(userMessage, availableTools);
         AIOpenAIResponse openAIResponse = sendRequest(requestBody);
         return processOpenAIResponse(openAIResponse, availableTools, 0);

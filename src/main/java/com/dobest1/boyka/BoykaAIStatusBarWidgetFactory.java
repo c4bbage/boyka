@@ -1,7 +1,6 @@
 package com.dobest1.boyka;
 
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.wm.StatusBar;
 import com.intellij.openapi.wm.StatusBarWidget;
 import com.intellij.openapi.wm.StatusBarWidgetFactory;
 import org.jetbrains.annotations.NotNull;

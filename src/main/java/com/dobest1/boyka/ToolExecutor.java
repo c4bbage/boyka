@@ -28,7 +28,7 @@ public class ToolExecutor {
                     return fileTools.editAndApply(
                             args.get("path").getAsString(),
                             args.get("instructions").getAsString(),
-                            args.get("project_context").getAsString(),false,3
+                            args.get("project_context").getAsString(), false, 3
                     ).get();
                 case "execute_code":
                     return fileTools.executeCode(args.get("code").getAsString());
@@ -47,8 +47,8 @@ public class ToolExecutor {
                     return "Unknown tool call: " + toolName;
             }
         } catch (Exception e) {
-            BoykaAILogger.error("Error in tool execution: "+toolName+arguments, e);
-            return "An error occurred during <+"+toolName+">+tool execution:  "+ arguments+ "\nError msg: "+ e.getMessage();
+            BoykaAILogger.error("Error in tool execution: " + toolName + arguments, e);
+            return "An error occurred during <+" + toolName + ">+tool execution:  " + arguments + "\nError msg: " + e.getMessage();
         }
     }
 }

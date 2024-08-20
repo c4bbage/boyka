@@ -1,6 +1,9 @@
 package com.dobest1.boyka;
 
-import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.CommonDataKeys;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
@@ -15,7 +18,7 @@ public class AddToContextAction extends AnAction {
         VirtualFile[] files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY);
         if (files == null || files.length == 0) return;
         BoykaAILogger.info("contextManager Adding " + files.length + " files to context");
-        ContextManager contextManager = ContextManager.getInstance();
+        ContextManager contextManager = ContextManager.getInstance(project);
         boolean contextChanged = false;
         for (VirtualFile file : files) {
             if (!contextManager.isFileInContext(file.getPath())) {

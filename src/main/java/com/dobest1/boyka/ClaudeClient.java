@@ -3,7 +3,6 @@ package com.dobest1.boyka;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.intellij.openapi.project.Project;
 import okhttp3.*;
 
 import java.io.IOException;
@@ -24,9 +23,11 @@ public class ClaudeClient {
     private final ToolExecutor toolExecutor;
     private static final int MAX_RETRIES = 3;
     private static final int MAX_RECURSION_DEPTH = 20;
+
     public void clearConversationHistory() {
         this.conversationHistory.clear();
     }
+
     public ClaudeClient(ClaudeConfig config, String prompt, ToolExecutor toolExecutor) {
         this.config = config;
         this.apiKey = config.getApiKey();
@@ -47,25 +48,27 @@ public class ClaudeClient {
         this(config, prompt, null);
     }
 
-    public String sendMessage(String userMessage,List<Tool> availableTools) throws IOException {
+    public String sendMessage(String userMessage, List<Tool> availableTools) throws IOException {
+        // sleep(1)
+
         JsonObject requestBody = buildRequestBody(userMessage, availableTools);
         AIClaudeResponse claudeResponse = sendRequest(requestBody);
         return processClaudeResponse(claudeResponse, availableTools, 0);
     }
 
     public String sendMessageNoHistory(String systemPrompt, String userMessage, String context, List<Tool> availableTools) throws IOException {
-        JsonObject requestBody = buildRequestBody(systemPrompt, List.of(new Message[]{new Message("user", userMessage)}),  context, availableTools);
+        JsonObject requestBody = buildRequestBody(systemPrompt, List.of(new Message[]{new Message("user", userMessage)}), context, availableTools);
         AIClaudeResponse claudeResponse = sendRequest(requestBody);
         // If max tokens reached, try again with a shorter message
         if (Objects.equals(claudeResponse.stop_reason, "max_tokens")) {
-            String finalmessage=claudeResponse.content.get(0).text;
+            String finalmessage = claudeResponse.content.get(0).text;
             BoykaAILogger.info("Max tokens reached. Please try again with a shorter message.");
             List<Message> messages = new ArrayList<>();
             messages.add(new Message("user", userMessage));
             messages.add(new Message("assistant", claudeResponse.content));
             messages.add(new Message("user", "Max tokens reached. Please continue"));
-            requestBody=buildRequestBody(systemPrompt, messages, context, Collections.emptyList());
-            finalmessage+=sendRequest(requestBody).content.get(0).text.replace("<REPLACE>\\n", "");
+            requestBody = buildRequestBody(systemPrompt, messages, context, Collections.emptyList());
+            finalmessage += sendRequest(requestBody).content.get(0).text.replace("<REPLACE>\\n", "");
             return finalmessage;
         }
         return processClaudeResponse(claudeResponse, availableTools, 0);

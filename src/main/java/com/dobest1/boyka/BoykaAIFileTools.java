@@ -1,6 +1,7 @@
 package com.dobest1.boyka;
 
 import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -8,20 +9,14 @@ import com.intellij.openapi.vfs.VirtualFileManager;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import com.google.gson.reflect.TypeToken;
-
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 // Added this import statement
 
 
@@ -35,11 +30,11 @@ public class BoykaAIFileTools {
     private final List<String> codeEditorMemory = new ArrayList<>();
     private final Map<String, Integer> codeEditorTokens = new HashMap<>();
 
-    public BoykaAIFileTools(Project project  ) {
+    public BoykaAIFileTools(Project project) {
         this.project = project;
         codeEditorTokens.put("input", 0);
         codeEditorTokens.put("output", 0);
-        this.contextManager = ContextManager.getInstance();
+        this.contextManager = ContextManager.getInstance(project);
 
         this.workingDirectory = Paths.get(Objects.requireNonNull(project.getBasePath()));
     }
@@ -61,10 +56,10 @@ public class BoykaAIFileTools {
         try {
             Files.createDirectories(dirPath);
             VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
-            return "文件夹创建成功"+dirPath;
+            return "文件夹创建成功" + dirPath;
         } catch (IOException e) {
             // 使用日志记录错误
-            return "Error: 文件夹创建失败"+dirPath+e.getMessage();
+            return "Error: 文件夹创建失败" + dirPath + e.getMessage();
         }
     }
 
@@ -87,16 +82,16 @@ public class BoykaAIFileTools {
     public String writeFile(String path, String content) {
         Path filePath = workingDirectory.resolve(path);
         if (isValidPath(filePath)) {
-            return "Error: 无效的路径"+filePath;
+            return "Error: 无效的路径" + filePath;
         }
         try {
             Files.write(filePath, content.getBytes());
-            contextManager.updateFileContent(String.valueOf(filePath),content);
+            contextManager.updateFileContent(String.valueOf(filePath), content);
             VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
             return "文件写入成功";
         } catch (IOException e) {
             // 使用日志记录错误
-            return "Error: 文件写入失败"+e.getMessage();
+            return "Error: 文件写入失败" + e.getMessage();
         }
     }
 
@@ -127,16 +122,16 @@ public class BoykaAIFileTools {
     }
 
     public List<String> listFiles(String path) {
-        Path dirPath =null;
+        Path dirPath = null;
 
-        if (path==null || path.isEmpty()|| path.equals(".")) {
+        if (path == null || path.isEmpty() || path.equals(".")) {
             dirPath = workingDirectory;
-        }else{
+        } else {
             dirPath = workingDirectory.resolve(path);
         }
 
         if (isValidPath(dirPath)) {
-            return Collections.singletonList("Error: 无效的路径"+dirPath+workingDirectory);
+            return Collections.singletonList("Error: 无效的路径" + dirPath + workingDirectory);
         }
         try {
             return Files.list(dirPath)
@@ -147,22 +142,25 @@ public class BoykaAIFileTools {
         }
     }
 
-    public String readFile (String path) {
+    public String readFile(String path) {
         Path filePath = workingDirectory.resolve(path);
         if (isValidPath(filePath)) {
-            BoykaAILogger.warn("Error: 读取文件失败"+filePath);
-            return "Error: 无效的路径"+filePath;
+            BoykaAILogger.warn("Error: 读取文件失败" + filePath);
+            return "Error: 无效的路径" + filePath;
         }
         try {
-
-            String content= new String(Files.readAllBytes(filePath));
+            String content = new String(Files.readAllBytes(filePath));
             contextManager.updateFileContent(path, content);
             return content;
         } catch (IOException e) {
-            // 使用日志记录错误
-            BoykaAILogger.error("Error: readFile 读取文件失败"+path, e);
-            return "Error: 读取文件失败"+path;
+            BoykaAILogger.error("Error: readFile 读取文件失败" + path, e);
+            return "Error: 读取文件失败" + path;
         }
+    }
+
+    // 当需要获取完整上下文时
+    public String getFullContext() {
+        return contextManager.getFullContext();
     }
 
     public List<String> readMultipleFiles(List<String> paths) {
@@ -212,12 +210,13 @@ public class BoykaAIFileTools {
     }
 
     // 刷新 IntelliJ IDEA 的文件系统
-    public  void refreshFileSystem(@NotNull String path) {
+    public void refreshFileSystem(@NotNull String path) {
         VirtualFile virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(path);
         if (virtualFile != null) {
             virtualFile.refresh(false, true);
         }
     }
+
     public CompletableFuture<String> generateEditInstructions(String filePath, String fileContent,
                                                               String instructions, String projectContext,
                                                               Map<String, String> fullFileContents) {
@@ -272,8 +271,8 @@ public class BoykaAIFileTools {
                             .apiUrl(BoykaAISettings.getInstance().getState().claudeAddress)
                             .model(BoykaAISettings.getInstance().getState().claudeModel)
                             .build();
-                    ClaudeClient claudeClient = new ClaudeClient(claudeConfig,systemPrompt);
-                    response= claudeClient.sendMessageNoHistory(systemPrompt, "Generate SEARCH/REPLACE blocks for the necessary changes.", "",Collections.emptyList());
+                    ClaudeClient claudeClient = new ClaudeClient(claudeConfig, systemPrompt);
+                    response = claudeClient.sendMessageNoHistory(systemPrompt, "Generate SEARCH/REPLACE blocks for the necessary changes.", "", Collections.emptyList());
                 } else {
                     OpenAIConfig openAIConfig = new OpenAIConfig.Builder()
                             .apiKey(BoykaAISettings.getInstance().getState().openAIKey)
@@ -282,7 +281,7 @@ public class BoykaAIFileTools {
                             .maxTokens(BoykaAISettings.getInstance().getState().maxTokens)
                             .build();
                     OpenAIClient openAIClient = new OpenAIClient(openAIConfig, systemPrompt);
-                    response= openAIClient.sendMessageNoHistory(systemPrompt, "Generate SEARCH/REPLACE blocks for the necessary changes.", "",Collections.emptyList());
+                    response = openAIClient.sendMessageNoHistory(systemPrompt, "Generate SEARCH/REPLACE blocks for the necessary changes.", "", Collections.emptyList());
                 }
                 // Update token usage for code editor
                 // Map<String, Integer> usage = aiService.getLastUsage();
@@ -290,13 +289,13 @@ public class BoykaAIFileTools {
                 // codeEditorTokens.put("output", codeEditorTokens.get("output") + usage.get("output"));
 
                 List<EditInstruction> editInstructions = parseSearchReplaceBlocks(response);
-                BoykaAILogger.info("generateEditInstructions editInstructions: "+editInstructions.toString());
+                BoykaAILogger.info("generateEditInstructions editInstructions: " + editInstructions.toString());
                 // Update code editor memory
                 codeEditorMemory.add("Edit Instructions for " + filePath + ":\n" + response);
 
                 // Add the file to code_editor_files set
                 codeEditorFiles.add(filePath);
-                BoykaAILogger.info("generateEditInstructions: "+gson.toJson(editInstructions));
+                BoykaAILogger.info("generateEditInstructions: " + gson.toJson(editInstructions));
                 return gson.toJson(editInstructions);
             } catch (Exception e) {
                 BoykaAILogger.error("Error: in generating edit instructions", e);
@@ -322,7 +321,7 @@ public class BoykaAIFileTools {
                                                   boolean isAutomode, int maxRetries) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                Path filePath=workingDirectory.resolve(path);
+                Path filePath = workingDirectory.resolve(path);
                 String originalContent = fileContents.getOrDefault(filePath, "");
                 if (originalContent.isEmpty()) {
                     originalContent = new String(readFile(String.valueOf(filePath)));
@@ -336,8 +335,9 @@ public class BoykaAIFileTools {
                     BoykaAILogger.info("editAndApply: Edit instructions generated for " + path + ":\n" + editInstructionsJson);
                     if (!editInstructionsJson.equals("[]")) {
                         List<EditInstruction> editInstructions = gson.fromJson(editInstructionsJson,
-                                new TypeToken<List<EditInstruction>>(){}.getType());
-                        BoykaAILogger.info("editAndApply: Edit instructions parsed for " + path + ":\n" + editInstructions );
+                                new TypeToken<List<EditInstruction>>() {
+                                }.getType());
+                        BoykaAILogger.info("editAndApply: Edit instructions parsed for " + path + ":\n" + editInstructions);
                         BoykaAILogger.info("Attempt " + (attempt + 1) + "/" + maxRetries +
                                 ": The following SEARCH/REPLACE blocks have been generated:");
                         for (int i = 0; i < editInstructions.size(); i++) {
@@ -396,10 +396,10 @@ public class BoykaAIFileTools {
             if (matcher.find()) {
                 editedContent = matcher.replaceFirst(Matcher.quoteReplacement(replaceContent));
                 changesMade = true;
-                System.out.println("Applied edit " + (i+1) + "/" + editInstructions.size());
+                System.out.println("Applied edit " + (i + 1) + "/" + editInstructions.size());
             } else {
-                System.out.println("Edit " + (i+1) + "/" + editInstructions.size() + " not applied: content not found");
-                failedEdits.add("Edit " + (i+1) + ": " + searchContent);
+                System.out.println("Edit " + (i + 1) + "/" + editInstructions.size() + " not applied: content not found");
+                failedEdits.add("Edit " + (i + 1) + ": " + searchContent);
             }
         }
 

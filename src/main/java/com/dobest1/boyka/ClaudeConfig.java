@@ -21,14 +21,37 @@ public class ClaudeConfig {
         this.writeTimeout = builder.writeTimeout;
     }
 
-    public String getApiKey() { return apiKey; }
-    public String getApiUrl() { return apiUrl; }
-    public String getModel() { return model; }
-    public int getMaxTokens() { return maxTokens; }
-    public String getAnthropicVersion() { return anthropicVersion; }
-    public int getConnectionTimeout() { return connectionTimeout; }
-    public int getReadTimeout() { return readTimeout; }
-    public int getWriteTimeout() { return writeTimeout; }
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public String getApiUrl() {
+        return apiUrl;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public int getMaxTokens() {
+        return maxTokens;
+    }
+
+    public String getAnthropicVersion() {
+        return anthropicVersion;
+    }
+
+    public int getConnectionTimeout() {
+        return connectionTimeout;
+    }
+
+    public int getReadTimeout() {
+        return readTimeout;
+    }
+
+    public int getWriteTimeout() {
+        return writeTimeout;
+    }
 
     public static class Builder {
         private String apiKey;

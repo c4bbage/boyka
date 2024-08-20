@@ -6,8 +6,8 @@ import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.util.NlsContexts;
 import com.intellij.ui.components.JBLabel;
-import com.intellij.ui.components.JBTextField;
 import com.intellij.ui.components.JBTabbedPane;
+import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.JBUI;
 
 import javax.swing.*;
@@ -74,7 +74,7 @@ public class BoykaAIConfigurable implements Configurable {
         addressLabelPanel.add(addressLabel);
 
         JBLabel infoLabel = new JBLabel(AllIcons.General.Information);
-        infoLabel.setToolTipText("https://api.openai.com/v1/");
+        infoLabel.setToolTipText("ex: https://api.openai.com/v1/");
         addressLabelPanel.add(infoLabel);
 
         gbc.gridwidth = 1;
@@ -157,7 +157,6 @@ public class BoykaAIConfigurable implements Configurable {
         panel.add(claudeAddressField, gbc);
 
 
-
         // Claude API 密钥
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
@@ -200,7 +199,6 @@ public class BoykaAIConfigurable implements Configurable {
         textField.setPreferredSize(new Dimension(300, textField.getPreferredSize().height));
         return textField;
     }
-
 
 
     private JPanel createCommonPanel() {
@@ -263,7 +261,7 @@ public class BoykaAIConfigurable implements Configurable {
                 || enableClaude.isSelected() != state.enableClaude
                 || enableOpenai.isSelected() != state.enableOpenai
                 || !openAIModelSelector.getSelectedItem().equals(state.selectedModel)
-                ||  !autoRepeatCountField.getText().equals(String.valueOf(state.autoRepeatCount));
+                || !autoRepeatCountField.getText().equals(String.valueOf(state.autoRepeatCount));
     }
 
     @Override
