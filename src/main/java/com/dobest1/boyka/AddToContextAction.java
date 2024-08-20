@@ -15,7 +15,7 @@ public class AddToContextAction extends AnAction {
         VirtualFile[] files = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY);
         if (files == null || files.length == 0) return;
         BoykaAILogger.info("contextManager Adding " + files.length + " files to context");
-        ContextManager contextManager = ContextManager.getInstance(project);
+        ContextManager contextManager = ContextManager.getInstance();
         boolean contextChanged = false;
         for (VirtualFile file : files) {
             if (!contextManager.isFileInContext(file.getPath())) {

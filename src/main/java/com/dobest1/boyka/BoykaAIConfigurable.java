@@ -70,11 +70,11 @@ public class BoykaAIConfigurable implements Configurable {
 
         // OpenAI 地址
         JPanel addressLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JBLabel addressLabel = new JBLabel("OpenAI 地址:");
+        JBLabel addressLabel = new JBLabel("OpenAI base_url:");
         addressLabelPanel.add(addressLabel);
 
         JBLabel infoLabel = new JBLabel(AllIcons.General.Information);
-        infoLabel.setToolTipText("示例: https://api.openai.com/v1/");
+        infoLabel.setToolTipText("https://api.openai.com/v1/");
         addressLabelPanel.add(infoLabel);
 
         gbc.gridwidth = 1;
@@ -92,7 +92,7 @@ public class BoykaAIConfigurable implements Configurable {
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JBLabel("OpenAI API 密钥:"), gbc);
+        panel.add(new JBLabel("OpenAI API-KEY:"), gbc);
 
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         gbc.weightx = 1.0;
@@ -104,7 +104,7 @@ public class BoykaAIConfigurable implements Configurable {
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JBLabel("选择模型:"), gbc);
+        panel.add(new JBLabel("Select model:"), gbc);
 
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         gbc.weightx = 1.0;
@@ -116,14 +116,14 @@ public class BoykaAIConfigurable implements Configurable {
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         gbc.weightx = 1.0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        refreshModelsButton = new JButton("刷新模型列表");
+        refreshModelsButton = new JButton("Refresh models");
         panel.add(refreshModelsButton, gbc);
 
         // 启用 OpenAI
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JBLabel("启用OpenAI:"), gbc);
+        panel.add(new JBLabel("Enable openAI:"), gbc);
 
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         enableOpenai = new JCheckBox();
@@ -138,11 +138,11 @@ public class BoykaAIConfigurable implements Configurable {
 
 
         JPanel addressLabelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        JBLabel addressLabel = new JBLabel("Claude 地址:");
+        JBLabel addressLabel = new JBLabel("Claude base_url:");
         addressLabelPanel.add(addressLabel);
 
         JBLabel infoLabel = new JBLabel(AllIcons.General.Information);
-        infoLabel.setToolTipText("示例: https://api.anthropic.com/v1/");
+        infoLabel.setToolTipText("ex: https://api.anthropic.com/v1/");
         addressLabelPanel.add(infoLabel);
 
         gbc.gridwidth = 1;
@@ -162,7 +162,7 @@ public class BoykaAIConfigurable implements Configurable {
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JBLabel("Claude API 密钥:"), gbc);
+        panel.add(new JBLabel("Claude API-KEY:"), gbc);
 
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         gbc.weightx = 1.0;
@@ -174,7 +174,7 @@ public class BoykaAIConfigurable implements Configurable {
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JBLabel("Claude 模型:"), gbc);
+        panel.add(new JBLabel("Claude model:"), gbc);
 
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         gbc.weightx = 1.0;
@@ -186,7 +186,7 @@ public class BoykaAIConfigurable implements Configurable {
         gbc.gridwidth = 1;
         gbc.weightx = 0.0;
         gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JBLabel("启用Claude:"), gbc);
+        panel.add(new JBLabel("Enable claude:"), gbc);
 
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         enableClaude = new JCheckBox();
@@ -209,7 +209,7 @@ public class BoykaAIConfigurable implements Configurable {
 
         // 第一行：最大 Tokens
         gbc.gridwidth = 1;
-        panel.add(new JBLabel("最大 Tokens:"), gbc);
+        panel.add(new JBLabel("Max tokens:"), gbc);
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         maxTokensField = new JBTextField();
         panel.add(maxTokensField, gbc);
@@ -217,7 +217,7 @@ public class BoykaAIConfigurable implements Configurable {
         // 第二行：自动重复次数
         gbc.gridwidth = 1;
         gbc.gridy = 1;
-        panel.add(new JBLabel("自动重复次数:"), gbc);
+        panel.add(new JBLabel("Auto repeat count:"), gbc);
         gbc.gridwidth = GridBagConstraints.REMAINDER;
         autoRepeatCountField = new JBTextField();
         panel.add(autoRepeatCountField, gbc);
