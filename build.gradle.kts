@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("org.jetbrains.intellij") version "1.16.1"  // Updated to latest version
+    id("org.jetbrains.intellij") version "1.17.1"  // Updated to latest version
 }
 
 group = "com.dobest1"
