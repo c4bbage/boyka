@@ -25,7 +25,7 @@ public class ContextManager {
     private long lastUpdateTime;
     private static final long CACHE_VALIDITY_PERIOD = 5000; // 5 seconds
     public static ContextManager getInstance(Project project) {
-        return ServiceManager.getService(ContextManager.class);
+        return ServiceManager.getService(project,ContextManager.class);
     }
 
     public ContextManager(Project project) {
