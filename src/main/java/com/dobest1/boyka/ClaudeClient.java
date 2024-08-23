@@ -3,9 +3,12 @@ package com.dobest1.boyka;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import okhttp3.*;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -24,6 +27,11 @@ public class ClaudeClient {
     private static final int MAX_RETRIES = 3;
     private static final int MAX_RECURSION_DEPTH = 20;
 
+    /**
+     * 清除会话历史记录。
+     *
+     * @return          无返回值
+     */
     public void clearConversationHistory() {
         this.conversationHistory.clear();
     }
@@ -48,13 +56,147 @@ public class ClaudeClient {
         this(config, prompt, null);
     }
 
-    public String sendMessage(String userMessage, List<Tool> availableTools) throws IOException {
-        // sleep(1)
 
+    public void sendStreamingMessage(String userMessage, List<Tool> availableTools, BoykaAIService.AIResponseCallback callback) throws IOException {
+        conversationHistory.add(new Message("user", userMessage));
         JsonObject requestBody = buildRequestBody(userMessage, availableTools);
-        AIClaudeResponse claudeResponse = sendRequest(requestBody);
-        return processClaudeResponse(claudeResponse, availableTools, 0);
+        requestBody.addProperty("stream", true);
+        sendStreamingRequest(requestBody, callback, availableTools);
     }
+
+    private void sendStreamingRequest(JsonObject requestBody, BoykaAIService.AIResponseCallback callback, List<Tool> availableTools) throws IOException {
+        sendStreamingRequestRecursive(requestBody, callback, availableTools, 0);
+    }
+
+
+    /**
+     * 递归地将RequestBody发送到Claude API，直到达到最大递归深度或遇到错误。
+     *
+     * @param requestBody          一个JsonObject对象，包含要发送的数据
+     * @param callback             一个回调函数，处理 Claude API 的响应
+     * @param availableTools       一个List对象，包含可用的工具
+     * @param depth                当前的递归深度
+     * @throws IOException         如果发生网络错误
+     */
+    private void sendStreamingRequestRecursive(JsonObject requestBody, BoykaAIService.AIResponseCallback callback, List<Tool> availableTools, int depth) throws IOException {
+        if (depth >= MAX_RECURSION_DEPTH) {
+            BoykaAILogger.warn("Max recursion depth reached. Stopping further processing.");
+            callback.onComplete("Max recursion depth reached. Stopping further processing.");
+            return;
+        }
+
+        Request request = new Request.Builder()
+                .url(apiUrl + "messages")
+                .post(RequestBody.create(MediaType.parse("application/json"), requestBody.toString()))
+                .addHeader("x-api-key", apiKey)
+                .addHeader("anthropic-version", config.getAnthropicVersion())
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                callback.onError("Request failed: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try (ResponseBody responseBody = response.body()) {
+                    if (!response.isSuccessful()) {
+                        BoykaAILogger.warn("Unexpected code request: " + requestBody);
+                        BoykaAILogger.warn("Unexpected code response: " + responseBody.string());
+                        callback.onError("Unexpected code " + response);
+                        return;
+                    }
+
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+                    String line;
+                    StringBuilder fullResponse = new StringBuilder();
+                    StringBuilder toolUseBuilder = new StringBuilder();
+                    String currentToolName = null;
+                    List<ToolResult> toolResults = new ArrayList<>();
+                    List<ContentBlock> contentBlocks = new ArrayList<>();
+                    String tool_id=null;
+
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("data: ")) {
+                            String jsonData = line.substring(6);
+                            BoykaAILogger.info(jsonData);
+                            JsonObject eventData = JsonParser.parseString(jsonData).getAsJsonObject();
+                            if (eventData.has("type")) {
+                                String type = eventData.get("type").getAsString();
+                                switch (type) {
+                                    case "message_start":
+                                        fullResponse = new StringBuilder();
+                                        toolResults.clear();
+                                        contentBlocks.clear();
+                                        break;
+                                    case "content_block_start":
+                                        JsonObject contentBlock = eventData.getAsJsonObject("content_block");
+                                        if (contentBlock != null && "tool_use".equals(contentBlock.get("type").getAsString())) {
+                                            currentToolName = contentBlock.get("name").getAsString();
+                                            tool_id= contentBlock.get("id").getAsString();
+                                            toolUseBuilder = new StringBuilder();
+                                        }
+                                        break;
+                                    case "content_block_delta":
+                                        JsonObject delta = eventData.getAsJsonObject("delta");
+                                        if (delta != null) {
+                                            if (delta.has("text")) {
+                                                String text = delta.get("text").getAsString();
+                                                fullResponse.append(text);
+                                                callback.onPartialResponse(text);
+                                            } else if (delta.has("type") && "input_json_delta".equals(delta.get("type").getAsString())) {
+                                                String partialJson = delta.get("partial_json").getAsString();
+                                                toolUseBuilder.append(partialJson);
+                                            }
+                                        }
+                                        break;
+                                    case "content_block_stop":
+                                        if (currentToolName != null) {
+                                            String toolInput = toolUseBuilder.toString();
+                                            JsonObject toolInput_jsonObject = JsonParser.parseString(toolInput).getAsJsonObject();
+                                            contentBlocks.add(new ContentBlock("tool_use", tool_id,currentToolName, toolInput_jsonObject));
+//                                            callback.onToolCall(currentToolName, toolInput);
+                                            String toolResult = executeToolCall(new ContentBlock(currentToolName, toolInput_jsonObject));
+//                                            callback.onToolResult(toolResult);
+                                            toolResults.add(new ToolResult(tool_id, toolResult, false));
+                                            currentToolName = null;
+                                            toolUseBuilder = new StringBuilder();
+                                        }
+                                        break;
+//                                    case "message_delta":
+//                                        break;
+                                    case "message_stop":
+                                        BoykaAILogger.info("message_stop");
+
+                                        String finalResponse = fullResponse.toString();
+                                        if (finalResponse.length() > 0) {
+                                            callback.onPartialResponse(("\n"));
+                                            contentBlocks.addFirst(new ContentBlock("text", finalResponse));
+                                        }
+                                        if (contentBlocks.size() > 0) {
+                                            conversationHistory.add(new Message("assistant", contentBlocks));
+                                        }
+                                        if (!toolResults.isEmpty()) {
+                                            conversationHistory.add(new Message("user", toolResults));
+                                            callback.onComplete(finalResponse);
+                                            // 处理工具调用结果
+                                            JsonObject newRequestBody = buildRequestBody("", availableTools);
+                                            newRequestBody.addProperty("stream", true);
+                                            sendStreamingRequestRecursive(newRequestBody, callback, availableTools, depth + 1);
+                                        } else {
+                                            callback.onComplete(finalResponse);
+                                        }
+                                        return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
 
     public String sendMessageNoHistory(String systemPrompt, String userMessage, String context, List<Tool> availableTools) throws IOException {
         JsonObject requestBody = buildRequestBody(systemPrompt, List.of(new Message[]{new Message("user", userMessage)}), context, availableTools);
@@ -78,7 +220,6 @@ public class ClaudeClient {
         JsonObject requestBody = new JsonObject();
         requestBody.addProperty("model", config.getModel());
         requestBody.addProperty("max_tokens", config.getMaxTokens());
-
         BoykaAISettings.State Settings = BoykaAISettings.getInstance().getState();
 
         assert Settings != null;
@@ -92,10 +233,6 @@ public class ClaudeClient {
         for (Message message : conversationHistory) {
             messages.add(message.toJsonObject());
         }
-        if (userMessage != null && !userMessage.isEmpty()) {
-            messages.add(new Message("user", userMessage).toJsonObject());
-            conversationHistory.add(new Message("user", userMessage));
-        }
         requestBody.add("messages", messages);
 
         if (availableTools != null && !availableTools.isEmpty()) {
@@ -106,8 +243,7 @@ public class ClaudeClient {
             requestBody.add("tools", toolsArray);
         }
 
-        return requestBody;
-    }
+        return requestBody;}
 
     private JsonObject buildRequestBody(String systemPrompt, List<Message> userMessage, String context, List<Tool> availableTools) {
         JsonObject requestBody = new JsonObject();
@@ -235,7 +371,20 @@ public class ClaudeClient {
         String id;
         String name;
         JsonObject input;
-
+        ContentBlock(String type,String text){
+            this.type=type;
+            this.text=text;
+        }
+        ContentBlock(String name,JsonObject input){
+            this.name=name;
+            this.input=input;
+        }
+        ContentBlock(String type,String id,String name,JsonObject input){
+            this.type=type;
+            this.id=id;
+            this.name=name;
+            this.input=input;
+        }
         JsonObject toJsonObject() {
             JsonObject jsonObject = new JsonObject();
             jsonObject.addProperty("type", type);

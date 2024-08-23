@@ -12,7 +12,11 @@ import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.wm.ToolWindow;
-import com.intellij.ui.components.*;
+import com.intellij.ui.JBColor;
+import com.intellij.ui.components.JBList;
+import com.intellij.ui.components.JBScrollPane;
+import com.intellij.ui.components.JBTabbedPane;
+import com.intellij.ui.components.JBTextField;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -20,17 +24,23 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 import java.awt.*;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class BoykaAIToolWindowContent implements ContextManager.ContextChangeListener {
+    private final Gson gson = new Gson();
+    private final OkHttpClient client = new OkHttpClient();
     private Project project;  // Added project field
     private JPanel myToolWindowContent;
     private JBTabbedPane tabbedPane;
-    private JBTextArea chatHistory;
-    private JBTextArea inputField;
+    private JTextPane chatHistory;
+    private JTextPane inputField;
     private JButton sendButton;
     private ComboBox<String> modelSelector;
     private JButton refreshModelsButton;
@@ -41,16 +51,13 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     private DefaultListModel<String> contextFilesModel;
     private JBTextField contextSearchField;
     private JButton continueButton;
-    private final Gson gson = new Gson();
     private JButton clearButton;
-
     private JTextField openAIBaseAddressField;
     private JTextField openAIKeyField;
     private JTextField claudeAddressField;
     private JTextField claudeKeyField;
     private JButton autoButton;
     private int remainingAutoRepeatCount = 0;
-    private final OkHttpClient client = new OkHttpClient();
 
     public BoykaAIToolWindowContent(Project project, ToolWindow toolWindow) {
         try {
@@ -222,12 +229,13 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     private JPanel createChatPanel() {
         JPanel chatPanel = new JPanel(new BorderLayout());
 
-        chatHistory = new JBTextArea();
+        chatHistory = new JTextPane();
         chatHistory.setEditable(false);
-        chatHistory.setLineWrap(true);
+        chatHistory.setContentType("text/html");
         JBScrollPane chatScrollPane = new JBScrollPane(chatHistory);
 
-        inputField = new JBTextArea();
+        inputField = new JTextPane();
+        inputField.setContentType("text/html");
         sendButton = new JButton("Send");
         sendButton.addActionListener(e -> sendMessage());
         continueButton = new JButton("Continue");
@@ -243,14 +251,13 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
         modelSelector.addActionListener(e -> updateChatTabTitle());
         JPanel inputPanel = new JPanel(new BorderLayout());
         inputField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createLineBorder(JBColor.GRAY),
                 BorderFactory.createEmptyBorder(5, 5, 5, 5)
         ));
 
         // 创建一个包含输入框的面板，设置为两行高
         JPanel textFieldPanel = new JPanel(new BorderLayout());
-        inputField.setLineWrap(true);
-        inputField.setWrapStyleWord(true);
+
         inputField.setPreferredSize(new Dimension(inputField.getPreferredSize().width, inputField.getPreferredSize().height * 2));
         textFieldPanel.add(inputField, BorderLayout.CENTER);
 
@@ -432,12 +439,12 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
     }
 
     private void sendMessage() {
-        String message = inputField.getText();
+        String message = getPlainTextFromInputField();
         if (!message.isEmpty()) {
             sendButton.setEnabled(false);
             continueButton.setEnabled(false);
             autoButton.setEnabled(false);
-            chatHistory.append("你: " + message + "\n");
+            appendToChatHistory("你: " + message, "user");
             try {
                 BoykaAISettings.@Nullable State settings = BoykaAISettings.getInstance().getState();
                 String title = "Waiting for AI response";
@@ -445,45 +452,111 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                     int c = settings.autoRepeatCount - remainingAutoRepeatCount + 1;
                     title = "Waiting for AI response (" + c + "/" + settings.autoRepeatCount + ")";
                 }
-
                 ProgressManager.getInstance().run(new Task.Backgroundable(project, title) {
                     @Override
                     public void run(@NotNull ProgressIndicator indicator) {
                         indicator.setIndeterminate(true);
                         inputField.setEnabled(false);
-                        String aiResponse = aiService.getAIResponse(message);
 
-                        inputField.setEnabled(true);
-                        fileTools.refreshFileSystem(project.getProjectFilePath());
-                        SwingUtilities.invokeLater(() -> {
-                            if (aiResponse.startsWith("Error:")) {
-                                chatHistory.append("AI: " + aiResponse + "\n");
-                                chatHistory.append(aiResponse + "\n");
-                                Messages.showErrorDialog(project, aiResponse, "Boyka AI Error");
-                            } else if (aiResponse.isEmpty() || aiResponse.isBlank()) {
-                                chatHistory.append("AI: " + "No response from AI.Please try again.\n");
-                            } else {
-                                chatHistory.append("AI: " + aiResponse + "\n");
-                                VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
-                                inputField.setText("");
-                                scrollToBottom(); // 滚动到底部
-                                if (remainingAutoRepeatCount > 0) {
-                                    sendAutoContinueMessage(message);
-                                }
+                        aiService.getStreamingAIResponse(message, new BoykaAIService.AIResponseCallback() {
+                            @Override
+                            public void onPartialResponse(String partialResponse) {
+                                SwingUtilities.invokeLater(() -> appendToChatHistory(partialResponse, "assistant"));
                             }
-                            updateChatTabTitle();
+
+                            @Override
+                            public void onToolCall(String toolName, String toolInput) {
+                                SwingUtilities.invokeLater(() -> appendToChatHistory("Using tool: " + toolName + "\nInput: " + toolInput, "tool"));
+                            }
+
+                            @Override
+                            public void onToolResult(String result) {
+                                SwingUtilities.invokeLater(() -> appendToChatHistory("Tool result: " + result, "tool-result"));
+                            }
+
+                            @Override
+                            public void onComplete(String finalResponse) {
+                                inputField.setEnabled(true);
+                                fileTools.refreshFileSystem(project.getProjectFilePath());
+                                SwingUtilities.invokeLater(() -> {
+                                    if (finalResponse.startsWith("Error:")) {
+                                        Messages.showErrorDialog(project, finalResponse, "Boyka AI Error");
+                                    } else if (finalResponse.isEmpty() || finalResponse.isBlank()) {
+                                        appendToChatHistory("No response from AI. Please try again.", "error");
+                                    } else {
+                                        VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
+                                        inputField.setText("");
+                                        scrollToBottom();
+                                        if (remainingAutoRepeatCount > 0) {
+                                            sendAutoContinueMessage(message);
+                                        }
+                                    }
+                                    updateChatTabTitle();
+                                    sendButton.setEnabled(true);
+                                    continueButton.setEnabled(true);
+                                    autoButton.setEnabled(true);
+                                });
+                            }
+
+                            @Override
+                            public void onError(String errorMessage) {
+                                SwingUtilities.invokeLater(() -> {
+                                    appendToChatHistory("Error: " + errorMessage, "error");
+                                    Messages.showErrorDialog(project, errorMessage, "Boyka AI Error");
+                                    sendButton.setEnabled(true);
+                                    continueButton.setEnabled(true);
+                                    autoButton.setEnabled(true);
+                                });
+                            }
                         });
                     }
                 });
 
             } catch (Exception e) {
                 BoykaAILogger.error("Error sending message", e);
-            } finally {
                 sendButton.setEnabled(true);
                 continueButton.setEnabled(true);
                 autoButton.setEnabled(true);
             }
+        }
+    }
 
+    private void appendToChatHistory(String content, String role) {
+        StyledDocument doc = chatHistory.getStyledDocument();
+        SimpleAttributeSet attributes = new SimpleAttributeSet();
+        switch (role) {
+            case "user":
+                StyleConstants.setForeground(attributes, JBColor.gray);
+                break;
+            case "assistant":
+                StyleConstants.setForeground(attributes, JBColor.BLACK);
+                break;
+            case "tool":
+                StyleConstants.setForeground(attributes, JBColor.ORANGE);
+                break;
+            case "tool-result":
+                StyleConstants.setForeground(attributes, JBColor.MAGENTA);
+                break;
+            case "error":
+                StyleConstants.setForeground(attributes, JBColor.RED);
+                break;
+            default:
+                StyleConstants.setForeground(attributes, JBColor.GREEN);
+        }
+        try {
+            doc.insertString(doc.getLength(), content, attributes);
+        } catch (BadLocationException e) {
+            BoykaAILogger.error("Error appending to chat history", e);
+        }
+        scrollToBottom();
+    }
+
+    private String getPlainTextFromInputField() {
+        try {
+            return inputField.getDocument().getText(0, inputField.getDocument().getLength()).trim();
+        } catch (BadLocationException e) {
+            BoykaAILogger.error("Error getting plain text from input field", e);
+            return "";
         }
     }
 

@@ -9,7 +9,19 @@ import java.util.List;
 
 public class BoykaAIService {
     private static final int TIMEOUT_MINUTES = 10;
-    private List<Message> conversationHistory = new ArrayList<>();
+    private final List<Message> conversationHistory = new ArrayList<>();
+
+    public interface AIResponseCallback {
+        void onPartialResponse(String partialResponse);
+
+        void onToolCall(String toolName, String toolInput);
+
+        void onToolResult(String result);
+
+        void onComplete(String finalResponse);
+
+        void onError(String errorMessage);
+    }
 
     //    private static final String BASE_SYSTEM_PROMPT = """
 //    You are  specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
@@ -199,28 +211,6 @@ public class BoykaAIService {
         initializeAIClients();
     }
 
-    public String getAIResponse(String userMessage) {
-
-        StringBuilder finalResponse = new StringBuilder();
-        try {
-            String response;
-            if (settings.enableClaude) {
-                response = claudeClient.sendMessage(userMessage, availableTools);
-            } else if (settings.enableOpenai) {
-                response = openAIClient.sendMessage(userMessage, availableTools);
-            } else {
-                return "Error: No AI service enabled. Please enable either Claude or OpenAI in settings.";
-            }
-            finalResponse.append(response);
-            return finalResponse.toString();
-        } catch (IOException e) {
-            BoykaAILogger.error("Error during API call", e);
-            return "Error: " + e.getMessage() + ". Please check your network connection and try again.";
-        } catch (Exception e) {
-            BoykaAILogger.error("Unexpected error", e);
-            return "Error: An unexpected error occurred. Please try again or contact support.";
-        }
-    }
 
     public void clearAllConversationHistories() {
         if (claudeClient != null) {
@@ -230,6 +220,35 @@ public class BoykaAIService {
             openAIClient.clearConversationHistory();
         }
     }
+
+    public void getStreamingAIResponse(String userMessage, AIResponseCallback callback) {
+        try {
+            if (settings.enableClaude) {
+                claudeClient.sendStreamingMessage(userMessage, availableTools, callback);
+            } else if (settings.enableOpenai) {
+                openAIClient.sendStreamingMessage(userMessage, availableTools, callback);
+            } else {
+
+                callback.onError("No AI service enabled. Please enable either Claude or OpenAI in settings.");
+
+            }
+
+        } catch (IOException e) {
+
+            BoykaAILogger.error("Error during API call", e);
+
+            callback.onError(e.getMessage() + ". Please check your network connection and try again.");
+
+        } catch (Exception e) {
+
+            BoykaAILogger.error("Unexpected error", e);
+
+            callback.onError("An unexpected error occurred. Please try again or contact support.");
+
+        }
+
+    }
+
 
     //    public void runAutoMode(String initialGoal, int maxIterations) {
 //        for (int i = 0; i < maxIterations; i++) {

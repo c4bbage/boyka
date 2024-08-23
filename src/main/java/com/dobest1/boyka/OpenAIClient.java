@@ -3,12 +3,16 @@ package com.dobest1.boyka;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import okhttp3.*;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import com.dobest1.boyka.BoykaAIService;
 
 public class OpenAIClient {
     private static final Gson gson = new Gson();
@@ -46,13 +50,89 @@ public class OpenAIClient {
         this(config, systemPrompt, null);
     }
 
-    public String sendMessage(String userMessage, List<Tool> availableTools) throws IOException {
-        JsonObject requestBody = buildRequestBody(userMessage, availableTools);
-        AIOpenAIResponse openAIResponse = sendRequest(requestBody);
-        return processOpenAIResponse(openAIResponse, availableTools, 0);
-    }
+    public void sendStreamingMessage(String userMessage, List<Tool> availableTools, BoykaAIService.AIResponseCallback callback) throws IOException {
 
-    public String sendMessageNoHistory(String systemPrompt, String userMessage, String context, List<Tool> availableTools) throws IOException {
+        JsonObject requestBody = buildRequestBody(userMessage, availableTools);
+
+        requestBody.addProperty("stream", true);
+
+        sendStreamingRequest(requestBody, callback,availableTools);
+
+    }
+    private void sendStreamingRequest(JsonObject requestBody, BoykaAIService.AIResponseCallback callback,List<Tool> availableTools) throws IOException {
+
+        Request request = new Request.Builder()
+
+                .url(apiUrl + "chat/completions")
+
+                .post(RequestBody.create(MediaType.parse("application/json"), requestBody.toString()))
+
+                .addHeader("Authorization", "Bearer " + apiKey)
+
+                .addHeader("Content-Type", "application/json")
+
+                .build();
+
+        httpClient.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                callback.onError("Request failed: " + e.getMessage());
+            }
+
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                try (ResponseBody responseBody = response.body()) {
+                    if (!response.isSuccessful()) {
+                        callback.onError("Unexpected code " + response);
+                        return;
+                    }
+
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(responseBody.byteStream()));
+                    String line;
+                    StringBuilder partialResponse = new StringBuilder();
+                    StringBuilder fullResponse = new StringBuilder();
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("data: ")) {
+                            String jsonData = line.substring(6);
+                            if ("[DONE]".equals(jsonData)) {
+                                String finalResponse = fullResponse.toString();
+                                conversationHistory.add(new Message("assistant", finalResponse));
+                                callback.onComplete(finalResponse);
+                                break;
+                            }
+                            JsonObject chunk = JsonParser.parseString(jsonData).getAsJsonObject();
+                            JsonArray choices = chunk.getAsJsonArray("choices");
+                            if (choices != null && choices.size() > 0) {
+                                JsonObject choice = choices.get(0).getAsJsonObject();
+                                if (choice.has("delta")) {
+                                    JsonObject delta = choice.getAsJsonObject("delta");
+                                    if (delta.has("content")) {
+                                        String content = delta.get("content").getAsString();
+                                        partialResponse.append(content);
+                                        fullResponse.append(content);
+                                        callback.onPartialResponse(content);
+                                    } else if (delta.has("function_call")) {
+                                        JsonObject functionCall = delta.getAsJsonObject("function_call");
+                                        String toolName = functionCall.get("name").getAsString();
+                                        String toolInput = functionCall.get("arguments").getAsString();
+                                        callback.onToolCall(toolName, toolInput);
+                                        String toolResult = executeToolCall(new ToolCall(toolName, toolInput));
+                                        callback.onToolResult(toolResult);
+                                        conversationHistory.add(new Message("function", toolResult));
+                                        // 递归处理工具调用结果
+                                        JsonObject newRequestBody = buildRequestBody("", availableTools);
+                                        sendStreamingRequest(newRequestBody, callback,availableTools);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+        public String sendMessageNoHistory(String systemPrompt, String userMessage, String context, List<Tool> availableTools) throws IOException {
         JsonObject requestBody = buildRequestBody(systemPrompt, userMessage, context, availableTools);
         AIOpenAIResponse openAIResponse = sendRequest(requestBody);
         return processOpenAIResponse(openAIResponse, availableTools, 0);
@@ -287,6 +367,9 @@ public class OpenAIClient {
         String id;
         String type;
         Function function;
+        ToolCall(String name, String arguments) {
+            this.function = new Function(name, arguments);
+        }
 
         JsonObject toJsonObject() {
             JsonObject jsonObject = new JsonObject();
@@ -300,7 +383,10 @@ public class OpenAIClient {
     private static class Function {
         String name;
         String arguments;
-
+        Function(String name, String arguments) {
+            this.name = name;
+            this.arguments = arguments;
+        }
         JsonObject toJsonObject() {
             JsonObject jsonObject = new JsonObject();
             jsonObject.addProperty("name", name);
