@@ -27,6 +27,8 @@
         <statusBarWidgetFactory implementation="com.dobest1.boyka.BoykaAIStatusBarWidgetFactory"
                                 id="com.dobest1.boyka.BoykaAIStatusBarWidget"
                                 order="first"/>
+        <editor.linePainter implementation="com.dobest1.boyka.MyEditorLinePainter"/>
+        <codeInsight.lineMarkerProvider language="JAVA" implementationClass="com.dobest1.boyka.MyLineMarkerProvider"/>
         <projectService serviceImplementation="com.dobest1.boyka.BoykaAIFileTools"/>
         <projectService serviceImplementation="com.dobest1.boyka.ContextManager"/>
     </extensions>
@@ -36,6 +38,8 @@
         <action id="Boyka.AddToContext" class="com.dobest1.boyka.AddToContextAction" text="添加到上下文" description="将文件添加到 Boyka AI 上下文">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
+
+        <action id="RefactorAction" class="com.dobest1.boyka.RefactorAction" text="Refactor" description="Refactor action"/>
         <!-- Add your actions here -->
     </actions>
 </idea-plugin>
