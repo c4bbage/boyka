@@ -102,9 +102,10 @@ public class ClaudeClient {
             public void onResponse(Call call, Response response) throws IOException {
                 try (ResponseBody responseBody = response.body()) {
                     if (!response.isSuccessful()) {
+                        // {"type":"error","error":{"type":"invalid_request_error","message":"Prompt is too long"}}
                         BoykaAILogger.warn("Unexpected code request: " + requestBody);
                         BoykaAILogger.warn("Unexpected code response: " + responseBody.string());
-                        callback.onError("Unexpected code " + response);
+                        callback.onError("Unexpected code " + responseBody.string());
                         return;
                     }
 
@@ -169,7 +170,7 @@ public class ClaudeClient {
                                     case "message_stop":
                                         BoykaAILogger.info("message_stop");
 
-                                        String finalResponse = fullResponse.toString();
+                                        String finalResponse = fullResponse.toString().trim();
                                         if (finalResponse.length() > 0) {
                                             callback.onPartialResponse(("\n"));
                                             contentBlocks.addFirst(new ContentBlock("text", finalResponse));
@@ -311,10 +312,7 @@ public class ClaudeClient {
     }
 
     private String processClaudeResponse(AIClaudeResponse claudeResponse, List<Tool> availableTools, int depth) throws IOException {
-        if (depth >= MAX_RECURSION_DEPTH) {
-            BoykaAILogger.warn("Max recursion depth reached. Stopping further processing.");
-            return "Max recursion depth reached. Stopping further processing.";
-        }
+
 
         StringBuilder finalResponse = new StringBuilder();
         List<ToolResult> toolResults = new ArrayList<>();
@@ -332,7 +330,14 @@ public class ClaudeClient {
 
         if (!toolResults.isEmpty()) {
             conversationHistory.add(new Message("user", toolResults));
-            String claudeResponseToTool = sendToolResultToClaude(availableTools, depth + 1);
+            String claudeResponseToTool="";
+            if (depth >= MAX_RECURSION_DEPTH) {
+                BoykaAILogger.warn("Max recursion depth reached. Stopping further tools processing.");
+                claudeResponseToTool = sendToolResultToClaude(Collections.emptyList(), depth + 1);
+            }else{
+                 claudeResponseToTool = sendToolResultToClaude(availableTools, depth + 1);
+            }
+
             finalResponse.append(claudeResponseToTool).append("\n");
         }
 

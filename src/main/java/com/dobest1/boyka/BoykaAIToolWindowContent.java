@@ -506,6 +506,7 @@ public class BoykaAIToolWindowContent implements ContextManager.ContextChangeLis
                                     sendButton.setEnabled(true);
                                     continueButton.setEnabled(true);
                                     autoButton.setEnabled(true);
+                                    inputField.setEnabled(true);
                                 });
                             }
                         });
