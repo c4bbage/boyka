@@ -29,7 +29,7 @@ public class BoykaAISettings implements PersistentStateComponent<BoykaAISettings
         /**
          * OpenAI 的服务地址
          */
-        public String openAIBaseAddress = "http://192.168.135.64:3000/v1/";
+        public String openAIBaseAddress = "https://api.openai.com/v1/";
         /**
          * OpenAI 的 API 密钥
          */
@@ -37,7 +37,7 @@ public class BoykaAISettings implements PersistentStateComponent<BoykaAISettings
         /**
          * Claude 的服务地址
          */
-        public String claudeAddress = "https://lucky-firefly-c4ef.aardhard897.workers.dev/v1/";  // 设置默认值
+        public String claudeAddress = "https://api.anthropic.com/v1/";  // 设置默认值
         /**
          * Claude 的 API 密钥
          */
