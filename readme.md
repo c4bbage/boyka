@@ -1,73 +1,73 @@
 # Boyka AI Assistant
 
-Boyka是一个强大的JetBrains IDE插件，旨在将AI辅助功能无缝集成到您的开发工作流程中。它利用先进的语言模型（如OpenAI的GPT和Anthropic的Claude）来提供智能代码建议、自动化任务和上下文相关的编程帮助。
+Boyka is a powerful JetBrains IDE plugin designed to seamlessly integrate AI-assisted functionalities into your development workflow. It leverages advanced language models (such as OpenAI's GPT and Anthropic's Claude) to provide intelligent code suggestions, automate tasks, and offer context-aware programming assistance.
 
-## 特性
+## Features
 
-- **智能代码助手**: 利用AI生成代码、提供建议和解决编程问题。
-- **多模型支持**: 集成了OpenAI和Claude等多个AI模型，可根据需求切换。
-- **上下文感知**: 能够理解并利用项目上下文，提供更相关的建议。
-- **高级文件操作**:
-    - 自动创建文件夹和文件：根据项目需求，AI可以自动生成所需的目录结构和文件。
-    - 智能文件编辑：AI可以根据指令自动修改现有文件，如添加新方法、更新注释或重构代码。
-    - 批量文件处理：支持对多个文件同时进行AI辅助的修改和更新。
-    - 文件内容分析：AI可以分析文件内容，提供优化建议或识别潜在问题。
-- **自定义工具**: 可扩展的工具系统，支持添加自定义AI辅助功能。
-- **流式输出**: 实时显示AI响应，提供更好的用户体验。
-- **对话历史**: 保存并管理与AI的交互历史，便于回顾和继续之前的对话。
+- **Intelligent Code Assistant**: Utilizes AI to generate code, provide suggestions, and solve programming problems.
+- **Multi-Model Support**: Integrates multiple AI models including OpenAI and Claude, allowing switching based on needs.
+- **Context-Aware**: Understands and utilizes project context to provide more relevant suggestions.
+- **Advanced File Operations**:
+  - Automatic folder and file creation: AI can automatically generate required directory structures and files based on project needs.
+  - Intelligent file editing: AI can automatically modify existing files based on instructions, such as adding new methods, updating comments, or refactoring code.
+  - Batch file processing: Supports AI-assisted modifications and updates to multiple files simultaneously.
+  - File content analysis: AI can analyze file contents, provide optimization suggestions, or identify potential issues.
+- **Custom Tools**: Extensible tool system supporting the addition of custom AI-assisted functionalities.
+- **Streaming Output**: Displays AI responses in real-time, providing a better user experience.
+- **Conversation History**: Saves and manages interaction history with AI, facilitating review and continuation of previous conversations.
 
-## 安装
+## Installation
 
-1. 打开您的JetBrains IDE（如IntelliJ IDEA、PyCharm、GoLand等）。
-2. 导航到 `Settings/Preferences` -> `Plugins`。
-3. 点击 `Marketplace` 标签，搜索 "Boyka AI Assistant"。
-4. 点击 `Install` 按钮。
-5. 重启IDE以激活插件。
+1. Open your JetBrains IDE (e.g., IntelliJ IDEA, PyCharm, GoLand, etc.).
+2. Navigate to `Settings/Preferences` -> `Plugins`.
+3. Click on the `Marketplace` tab and search for "Boyka AI Assistant".
+4. Click the `Install` button.
+5. Restart the IDE to activate the plugin.
 
-## 配置
+## Configuration
 
-首次使用时，您需要配置API密钥：
+On first use, you need to configure API keys:
 
-1. 导航到 `Settings/Preferences` -> `Tools` -> `Boyka AI Assistant`。
-2. 输入您的OpenAI API密钥和/或Claude API密钥。
-3. 选择默认使用的AI模型。
-4. 根据需要调整其他设置（如最大令牌数、自动重复次数等）。
+1. Navigate to `Settings/Preferences` -> `Tools` -> `Boyka AI Assistant`.
+2. Enter your OpenAI API key and/or Claude API key.
+3. Select the default AI model to use.
+4. Adjust other settings as needed (e.g., maximum tokens, auto-repeat count, etc.).
 
-## 使用方法
+## How to Use
 
-1. 在IDE中，通过 `Tools` -> `Boyka AI Assistant` 打开Boyka窗口。
-2. 在输入框中输入您的问题或指令。
-3. 点击 `Send` 按钮或使用快捷键 `Ctrl+Enter` (Windows/Linux) 或 `Cmd+Enter` (Mac) 发送请求。
-4. AI助手将在对话窗口中显示响应。
-5. 使用 `Continue` 按钮继续之前的对话，或 `Clear` 按钮开始新的对话。
+1. In the IDE, open the Boyka window via `Tools` -> `Boyka AI Assistant`.
+2. Enter your question or instruction in the input box.
+3. Click the `Send` button or use the shortcut `Ctrl+Enter` (Windows/Linux) or `Cmd+Enter` (Mac) to send the request.
+4. The AI assistant will display the response in the conversation window.
+5. Use the `Continue` button to continue previous conversations, or the `Clear` button to start a new conversation.
 
-## 高级功能
+## Advanced Features
 
-- **上下文管理**: 使用上下文面板添加或移除项目文件，以提供更精确的AI辅助。
-- **自动模式**: 启用自动模式，让AI连续工作，自动执行多个步骤。
-- **智能文件操作**:
-    - 通过简单的指令如"创建一个新的用户管理模块"，AI可以自动创建必要的文件夹结构和相关文件。
-    - 要求AI"更新所有模型类，添加时间戳字段"，它会自动遍历并修改相关文件。
-    - 使用"优化项目结构"指令，AI会分析当前项目结构并提供重组建议。
+- **Context Management**: Use the context panel to add or remove project files for more precise AI assistance.
+- **Auto Mode**: Enable auto mode to let AI work continuously, automatically executing multiple steps.
+- **Intelligent File Operations**:
+  - AI can automatically create necessary folder structures and related files with simple instructions like "Create a new user management module".
+  - Request AI to "Update all model classes, add timestamp fields", and it will automatically traverse and modify relevant files.
+  - Use the "Optimize project structure" command, and AI will analyze the current project structure and provide reorganization suggestions.
 
-## 注意事项
+## Notes
 
-- 确保您的API密钥安全，不要与他人分享。
-- AI生成的代码和建议仅供参考，请始终进行代码审查和测试。
-- 在使用自动文件操作功能时，建议先备份重要文件。
+- Ensure your API key is secure and not shared with others.
+- AI-generated code and suggestions are for reference only. Always perform code review and testing.
+- When using automatic file operation features, it's recommended to back up important files first.
 
-## 贡献
+## Contribution
 
-我们欢迎社区贡献！如果您有任何改进建议或发现了bug，请在GitHub上提交issue或pull request。
+We welcome community contributions! If you have any suggestions for improvements or have found a bug, please submit an issue or pull request on GitHub.
 
-## 许可证
+## License
 
-Boyka AI Assistant 遵循 [MIT 许可证](LICENSE)。
+Boyka AI Assistant is licensed under the [MIT License](LICENSE).
 
-## 联系我们
+## Contact Us
 
-如有任何问题或建议，请联系我们：support@boyka-ai.com
+For any questions or suggestions, please contact us at: c4bbage@live.com
 
 ---
 
-感谢您选择Boyka AI Assistant。我们希望这个工具能够显著提升您的开发效率和编程体验！
+Thank you for choosing Boyka AI Assistant. We hope this tool significantly enhances your development efficiency and programming experience!
